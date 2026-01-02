@@ -1,0 +1,317 @@
+services:
+  # API Gateway - Single entry point for all services
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./services/api-gateway/Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - AUTH_SERVICE_URL=http://auth-service:8000
+      - CUSTOMER_SERVICE_URL=http://customer-service:8000
+      - ROOM_SERVICE_URL=http://room-service:8000
+      - BOOKING_SERVICE_URL=http://booking-service:8000
+      - PAYMENT_SERVICE_URL=http://payment-service:8000
+      - REPORT_SERVICE_URL=http://report-service:8000
+    depends_on:
+      auth-service:
+        condition: service_started
+      customer-service:
+        condition: service_started
+      room-service:
+        condition: service_started
+      booking-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      report-service:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - soa-network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: .
+      dockerfile: ./services/auth/Dockerfile
+    container_name: auth-service
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@auth-db:3306/auth_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - soa-network
+
+  auth-db:
+    image: mysql:8.0
+    container_name: auth-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=auth_db
+    volumes:
+      - auth_db_data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --innodb-force-recovery=0
+
+  # Customer Service
+  customer-service:
+    build:
+      context: .
+      dockerfile: ./services/customer/Dockerfile
+    container_name: customer-service
+    ports:
+      - "8002:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@customer-db:3306/customer_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+    depends_on:
+      customer-db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - soa-network
+
+  customer-db:
+    image: mysql:8.0
+    container_name: customer-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=customer_db
+    volumes:
+      - customer_db_data:/var/lib/mysql
+    ports:
+      - "3308:3306"
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --innodb-force-recovery=0
+
+  # Room Service
+  room-service:
+    build:
+      context: .
+      dockerfile: ./services/room/Dockerfile
+    container_name: room-service
+    ports:
+      - "8003:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@room-db:3306/room_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+    depends_on:
+      room-db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - soa-network
+
+  room-db:
+    image: mysql:8.0
+    container_name: room-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=room_db
+    volumes:
+      - room_db_data:/var/lib/mysql
+    ports:
+      - "3309:3306"
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --innodb-force-recovery=0
+
+  # Booking Service
+  booking-service:
+    build:
+      context: .
+      dockerfile: ./services/booking/Dockerfile
+    container_name: booking-service
+    ports:
+      - "8004:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@booking-db:3306/booking_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      - CUSTOMER_SERVICE_URL=http://customer-service:8000
+      - ROOM_SERVICE_URL=http://room-service:8000
+    depends_on:
+      booking-db:
+        condition: service_healthy
+      customer-service:
+        condition: service_started
+      room-service:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - soa-network
+
+  booking-db:
+    image: mysql:8.0
+    container_name: booking-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=booking_db
+    volumes:
+      - booking_db_data:/var/lib/mysql
+    ports:
+      - "3310:3306"
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --innodb-force-recovery=0
+
+  # Payment Service
+  payment-service:
+    build:
+      context: .
+      dockerfile: ./services/payment/Dockerfile
+    container_name: payment-service
+    ports:
+      - "8005:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@payment-db:3306/payment_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      - BOOKING_SERVICE_URL=http://booking-service:8000
+    depends_on:
+      payment-db:
+        condition: service_healthy
+      booking-service:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - soa-network
+
+  payment-db:
+    image: mysql:8.0
+    container_name: payment-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=payment_db
+    volumes:
+      - payment_db_data:/var/lib/mysql
+    ports:
+      - "3311:3306"
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --innodb-force-recovery=0
+
+  # Report Service
+  report-service:
+    build:
+      context: .
+      dockerfile: ./services/report/Dockerfile
+    container_name: report-service
+    ports:
+      - "8006:8000"
+    environment:
+      - DATABASE_URL=mysql+pymysql://root:password@report-db:3306/report_db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      - BOOKING_SERVICE_URL=http://booking-service:8000
+      - PAYMENT_SERVICE_URL=http://payment-service:8000
+      - ROOM_SERVICE_URL=http://room-service:8000
+    depends_on:
+      report-db:
+        condition: service_healthy
+      booking-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      room-service:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - soa-network
+
+  report-db:
+    image: mysql:8.0
+    container_name: report-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=report_db
+    volumes:
+      - report_db_data:/var/lib/mysql
+    ports:
+      - "3312:3306"
+    networks:
+      - soa-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --innodb-force-recovery=0
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - auth-service
+      - customer-service
+      - room-service
+      - booking-service
+      - payment-service
+      - report-service
+    networks:
+      - soa-network
+
+volumes:
+  auth_db_data:
+  customer_db_data:
+  room_db_data:
+  booking_db_data:
+  payment_db_data:
+  report_db_data:
+
+networks:
+  soa-network:
+    driver: bridge
+
