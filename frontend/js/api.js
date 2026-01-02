@@ -1,11 +1,14 @@
-// API Configuration
+// API Configuration - All requests go through API Gateway
+const API_GATEWAY_URL = 'http://localhost:8000';
+
 const API_CONFIG = {
-    AUTH: 'http://localhost:8001',
-    CUSTOMER: 'http://localhost:8002',
-    ROOM: 'http://localhost:8003',
-    BOOKING: 'http://localhost:8004',
-    PAYMENT: 'http://localhost:8005',
-    REPORT: 'http://localhost:8006'
+    GATEWAY: API_GATEWAY_URL,
+    AUTH: `${API_GATEWAY_URL}/auth`,
+    CUSTOMER: `${API_GATEWAY_URL}/customers`,
+    ROOM: `${API_GATEWAY_URL}/rooms`,
+    BOOKING: `${API_GATEWAY_URL}/bookings`,
+    PAYMENT: `${API_GATEWAY_URL}/payments`,
+    REPORT: `${API_GATEWAY_URL}/reports`
 };
 
 // Get stored token
@@ -58,7 +61,7 @@ async function apiRequest(url, options = {}) {
     }
 }
 
-// Auth API
+// Auth API - Routes through API Gateway: /auth/*
 const authAPI = {
     register: async (userData) => {
         return apiRequest(`${API_CONFIG.AUTH}/register`, {
@@ -79,7 +82,7 @@ const authAPI = {
     }
 };
 
-// Customer API
+// Customer API - Routes through API Gateway: /customers/*
 const customerAPI = {
     getAll: async () => {
         return apiRequest(`${API_CONFIG.CUSTOMER}/customers`);
@@ -110,7 +113,7 @@ const customerAPI = {
     }
 };
 
-// Room API
+// Room API - Routes through API Gateway: /rooms/*
 const roomAPI = {
     getRoomTypes: async () => {
         return apiRequest(`${API_CONFIG.ROOM}/room-types`);
@@ -147,7 +150,7 @@ const roomAPI = {
     }
 };
 
-// Booking API
+// Booking API - Routes through API Gateway: /bookings/*
 const bookingAPI = {
     getAll: async (filters = {}) => {
         const params = new URLSearchParams(filters).toString();
@@ -179,7 +182,7 @@ const bookingAPI = {
     }
 };
 
-// Payment API
+// Payment API - Routes through API Gateway: /payments/*
 const paymentAPI = {
     getAll: async (filters = {}) => {
         const params = new URLSearchParams(filters).toString();
@@ -210,7 +213,7 @@ const paymentAPI = {
     }
 };
 
-// Report API
+// Report API - Routes through API Gateway: /reports/*
 const reportAPI = {
     getRevenue: async (startDate, endDate) => {
         const params = new URLSearchParams({ start_date: startDate, end_date: endDate }).toString();

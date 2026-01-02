@@ -16,7 +16,9 @@ function checkAuth() {
 async function loadUserInfo() {
     try {
         currentUser = await authAPI.getMe();
-        document.getElementById('userInfo').textContent = `Xin chào, ${currentUser.username}`;
+        if (document.getElementById('userInfo')) {
+            document.getElementById('userInfo').textContent = `Xin chào, ${currentUser.username}`;
+        }
     } catch (error) {
         console.error('Failed to load user info:', error);
         logout();
@@ -25,28 +27,47 @@ async function loadUserInfo() {
 
 // Show authenticated UI
 function showAuthenticatedUI() {
-    document.getElementById('loginBtn').style.display = 'none';
-    document.getElementById('logoutBtn').style.display = 'inline-flex';
-    document.getElementById('userInfo').style.display = 'inline';
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const userInfo = document.getElementById('userInfo');
+    const loginPage = document.getElementById('loginPage');
     
-    // Hide login page, show dashboard
-    document.getElementById('loginPage').classList.remove('active');
-    showPage('dashboard');
+    if (loginBtn) loginBtn.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+    if (userInfo) {
+        userInfo.style.display = 'inline';
+        if (currentUser) {
+            userInfo.textContent = `Xin chào, ${currentUser.username}`;
+        }
+    }
+    
+    // Hide login page, show dashboard (only if loginPage exists)
+    if (loginPage) {
+        loginPage.classList.remove('active');
+        showPage('dashboard');
+    }
 }
 
 // Show login UI
 function showLoginUI() {
-    document.getElementById('loginBtn').style.display = 'inline-flex';
-    document.getElementById('logoutBtn').style.display = 'none';
-    document.getElementById('userInfo').style.display = 'none';
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const userInfo = document.getElementById('userInfo');
+    const loginPage = document.getElementById('loginPage');
     
-    // Show login page
-    document.getElementById('loginPage').classList.add('active');
-    document.querySelectorAll('.page').forEach(page => {
-        if (page.id !== 'loginPage') {
-            page.classList.remove('active');
-        }
-    });
+    if (loginBtn) loginBtn.style.display = 'inline-flex';
+    if (logoutBtn) logoutBtn.style.display = 'none';
+    if (userInfo) userInfo.style.display = 'none';
+    
+    // Show login page (only if loginPage exists)
+    if (loginPage) {
+        loginPage.classList.add('active');
+        document.querySelectorAll('.page').forEach(page => {
+            if (page.id !== 'loginPage') {
+                page.classList.remove('active');
+            }
+        });
+    }
 }
 
 // Login
@@ -55,8 +76,24 @@ async function login(username, password) {
         showLoading();
         const response = await authAPI.login(username, password);
         setToken(response.access_token);
+        currentUser = response.user;
         showToast('Đăng nhập thành công', 'success');
-        checkAuth();
+        
+        // Check user roles and redirect using router
+        const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
+        
+        // Sử dụng router để điều hướng
+        if (typeof router !== 'undefined' && router.onLoginSuccess) {
+            router.onLoginSuccess(userRoles);
+        } else {
+            // Fallback nếu router chưa load
+            if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
+                window.location.href = 'admin.html#dashboard';
+            } else {
+                window.location.href = 'user.html#home';
+            }
+        }
+        
         return true;
     } catch (error) {
         showError('loginError', error.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.');
@@ -82,12 +119,33 @@ async function register(userData) {
         return false;
     }
     
+    // Set default role to customer if not specified
+    if (!userData.role_name) {
+        userData.role_name = 'customer';
+    }
+    
     try {
         showLoading();
         const response = await authAPI.register(userData);
         setToken(response.access_token);
+        currentUser = response.user;
         showToast('Đăng ký thành công', 'success');
-        checkAuth();
+        
+        // Check user roles and redirect using router
+        const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
+        
+        // Sử dụng router để điều hướng
+        if (typeof router !== 'undefined' && router.onRegisterSuccess) {
+            router.onRegisterSuccess(userRoles);
+        } else {
+            // Fallback nếu router chưa load
+            if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
+                window.location.href = 'admin.html#dashboard';
+            } else {
+                window.location.href = 'user.html#home';
+            }
+        }
+        
         return true;
     } catch (error) {
         showError('registerError', error.message || 'Đăng ký thất bại. Vui lòng thử lại.');
@@ -103,7 +161,14 @@ function logout() {
     removeToken();
     currentUser = null;
     showToast('Đã đăng xuất', 'info');
-    showLoginUI();
+    
+    // Sử dụng router để logout
+    if (typeof router !== 'undefined' && router.logout) {
+        router.logout();
+    } else {
+        // Fallback
+        showLoginUI();
+    }
 }
 
 // Show error message

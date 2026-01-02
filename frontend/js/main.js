@@ -2,6 +2,23 @@
 
 // Show page
 function showPage(pageName) {
+    // Check if we're on admin page
+    if (document.body.classList.contains('admin-layout')) {
+        if (typeof showAdminPage === 'function') {
+            showAdminPage(pageName);
+        }
+        return;
+    }
+    
+    // Check if we're on user page
+    if (document.body.classList.contains('user-layout')) {
+        if (typeof showUserPage === 'function') {
+            showUserPage(pageName);
+        }
+        return;
+    }
+    
+    // Default behavior for main index.html
     // Hide all pages
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');

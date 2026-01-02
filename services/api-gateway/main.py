@@ -122,11 +122,15 @@ async def proxy_request(
         )
 
 
-def get_service_url(path: str) -> Optional[str]:
-    """Determine which service to route to based on path"""
+def get_service_url(path: str) -> Optional[tuple]:
+    """Determine which service to route to based on path
+    Returns: (service_url, stripped_path) or None
+    """
     for route_prefix, service_url in SERVICE_ROUTES.items():
         if path.startswith(route_prefix):
-            return service_url
+            # Strip the prefix from path when forwarding to service
+            stripped_path = path[len(route_prefix):].lstrip('/')
+            return (service_url, stripped_path)
     return None
 
 
@@ -162,17 +166,19 @@ async def root():
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def gateway_proxy(path: str, request: Request):
     """Proxy all requests to appropriate backend service"""
-    service_url = get_service_url(f"/{path}")
+    result = get_service_url(f"/{path}")
     
-    if not service_url:
+    if not result:
         raise HTTPException(
             status_code=404,
             detail=f"No service found for path: /{path}"
         )
     
+    service_url, stripped_path = result
+    
     return await proxy_request(
         service_url=service_url,
-        path=path,
+        path=stripped_path,
         method=request.method,
         request=request
     )

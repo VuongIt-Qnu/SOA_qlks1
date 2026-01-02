@@ -131,6 +131,48 @@ function confirmAction(message, title = 'Xác nhận') {
     });
 }
 
+// Format date
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('vi-VN', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+}
+
+// Format currency
+function formatCurrency(amount) {
+    if (amount === null || amount === undefined) return '$0';
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0
+    }).format(amount);
+}
+
+// Get status badge HTML
+function getStatusBadge(status) {
+    const statusMap = {
+        'pending': { class: 'status-pending', text: 'Pending', icon: 'fa-clock' },
+        'confirmed': { class: 'status-confirmed', text: 'Confirmed', icon: 'fa-check-circle' },
+        'cancelled': { class: 'status-cancelled', text: 'Cancelled', icon: 'fa-times-circle' },
+        'completed': { class: 'status-completed', text: 'Completed', icon: 'fa-check' },
+        'checked_in': { class: 'status-checked-in', text: 'Checked In', icon: 'fa-sign-in-alt' },
+        'checked_out': { class: 'status-checked-out', text: 'Checked Out', icon: 'fa-sign-out-alt' },
+        'available': { class: 'status-available', text: 'Available', icon: 'fa-check' },
+        'occupied': { class: 'status-occupied', text: 'Occupied', icon: 'fa-user' },
+        'maintenance': { class: 'status-maintenance', text: 'Maintenance', icon: 'fa-tools' },
+        'booked': { class: 'status-booked', text: 'Booked', icon: 'fa-calendar' }
+    };
+    
+    const statusInfo = statusMap[status] || { class: 'status-default', text: status, icon: 'fa-circle' };
+    return `<span class="status-badge ${statusInfo.class}">
+        <i class="fas ${statusInfo.icon}"></i> ${statusInfo.text}
+    </span>`;
+}
+
 // Export functions
 window.showToast = showToast;
 window.showLoading = showLoading;
@@ -140,4 +182,7 @@ window.formatPhone = formatPhone;
 window.validateEmail = validateEmail;
 window.validatePhone = validatePhone;
 window.confirmAction = confirmAction;
+window.formatDate = formatDate;
+window.formatCurrency = formatCurrency;
+window.getStatusBadge = getStatusBadge;
 

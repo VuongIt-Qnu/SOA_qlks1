@@ -8,6 +8,40 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <script>
+        // Auto redirect based on user role
+        (function() {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                try {
+                    const base64Url = token.split('.')[1];
+                    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                    }).join(''));
+                    const payload = JSON.parse(jsonPayload);
+                    const roles = payload.roles || [];
+                    
+                    if (roles.includes('admin') || roles.includes('manager') || roles.includes('receptionist')) {
+                        if (!window.location.pathname.includes('admin.html')) {
+                            window.location.href = 'admin.html';
+                        }
+                    } else {
+                        if (!window.location.pathname.includes('user.html') && !window.location.pathname.includes('admin.html')) {
+                            window.location.href = 'user.html';
+                        }
+                    }
+                } catch (e) {
+                    // Invalid token, stay on current page
+                }
+            } else {
+                // No token, redirect to user page
+                if (window.location.pathname === '/' || window.location.pathname.includes('index.html')) {
+                    window.location.href = 'user.html';
+                }
+            }
+        })();
+    </script>
     <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
@@ -398,6 +432,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/api.js"></script>
+    <script src="js/jwt-utils.js"></script>
+    <script src="js/router.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/customers.js"></script>
     <script src="js/rooms.js"></script>
