@@ -14,6 +14,7 @@ services:
       - BOOKING_SERVICE_URL=http://booking-service:8000
       - PAYMENT_SERVICE_URL=http://payment-service:8000
       - REPORT_SERVICE_URL=http://report-service:8000
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
     depends_on:
       auth-service:
         condition: service_started
@@ -285,24 +286,6 @@ services:
     restart: unless-stopped
     command: --default-authentication-plugin=mysql_native_password --innodb-force-recovery=0
 
-  # Frontend
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: frontend
-    ports:
-      - "3000:80"
-    depends_on:
-      - auth-service
-      - customer-service
-      - room-service
-      - booking-service
-      - payment-service
-      - report-service
-    networks:
-      - soa-network
-
 volumes:
   auth_db_data:
   customer_db_data:
@@ -314,4 +297,3 @@ volumes:
 networks:
   soa-network:
     driver: bridge
-

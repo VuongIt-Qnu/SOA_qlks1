@@ -47,16 +47,40 @@ async function apiRequest(url, options = {}) {
     };
     
     try {
+        console.log('API Request:', url, config); // Debug log
         const response = await fetch(url, config);
-        const data = await response.json();
+        
+        // Check if response is JSON
+        let data;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            const text = await response.text();
+            console.error('Non-JSON response:', text);
+            throw new Error(`Unexpected response format: ${text}`);
+        }
         
         if (!response.ok) {
-            throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+            // Extract error message from response
+            const errorMsg = data.detail || data.message || data.error || `HTTP error! status: ${response.status}`;
+            const error = new Error(errorMsg);
+            error.status = response.status;
+            error.data = data;
+            throw error;
         }
         
         return data;
     } catch (error) {
         console.error('API Request Error:', error);
+        console.error('URL:', url);
+        console.error('Config:', config);
+        
+        // Provide more helpful error message
+        if (error.message === 'Failed to fetch') {
+            throw new Error('Không thể kết nối đến server. Vui lòng kiểm tra API Gateway đã chạy chưa (http://localhost:8000)');
+        }
+        
         throw error;
     }
 }

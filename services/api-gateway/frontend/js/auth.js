@@ -1,5 +1,9 @@
 // Auth functionality
-let currentUser = null;
+// Note: currentUser is declared in user.js to avoid duplicate declaration
+// We use window.currentUser as a global variable
+if (typeof window.currentUser === 'undefined') {
+    window.currentUser = null;
+}
 
 // Check if user is logged in
 function checkAuth() {
@@ -15,9 +19,9 @@ function checkAuth() {
 // Load user info
 async function loadUserInfo() {
     try {
-        currentUser = await authAPI.getMe();
+        window.currentUser = await authAPI.getMe();
         if (document.getElementById('userInfo')) {
-            document.getElementById('userInfo').textContent = `Xin chào, ${currentUser.username}`;
+            document.getElementById('userInfo').textContent = `Xin chào, ${window.currentUser.username}`;
         }
     } catch (error) {
         console.error('Failed to load user info:', error);
@@ -36,8 +40,8 @@ function showAuthenticatedUI() {
     if (logoutBtn) logoutBtn.style.display = 'inline-flex';
     if (userInfo) {
         userInfo.style.display = 'inline';
-        if (currentUser) {
-            userInfo.textContent = `Xin chào, ${currentUser.username}`;
+        if (window.currentUser) {
+            userInfo.textContent = `Xin chào, ${window.currentUser.username}`;
         }
     }
     
@@ -76,7 +80,7 @@ async function login(username, password) {
         showLoading();
         const response = await authAPI.login(username, password);
         setToken(response.access_token);
-        currentUser = response.user;
+        window.currentUser = response.user;
         showToast('Đăng nhập thành công', 'success');
         
         // Check user roles and redirect using router
@@ -128,7 +132,7 @@ async function register(userData) {
         showLoading();
         const response = await authAPI.register(userData);
         setToken(response.access_token);
-        currentUser = response.user;
+        window.currentUser = response.user;
         showToast('Đăng ký thành công', 'success');
         
         // Check user roles and redirect using router
@@ -159,7 +163,7 @@ async function register(userData) {
 // Logout
 function logout() {
     removeToken();
-    currentUser = null;
+    window.currentUser = null;
     showToast('Đã đăng xuất', 'info');
     
     // Sử dụng router để logout
@@ -183,44 +187,64 @@ function showError(elementId, message) {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    // Login form
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const username = document.getElementById('loginUsername').value;
-        const password = document.getElementById('loginPassword').value;
-        await login(username, password);
-    });
+    // Login form (for index.html)
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            await login(username, password);
+        });
+    }
     
-    // Register form
-    document.getElementById('registerForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const userData = {
-            username: document.getElementById('regUsername').value,
-            email: document.getElementById('regEmail').value,
-            full_name: document.getElementById('regFullName').value,
-            password: document.getElementById('regPassword').value
-        };
-        await register(userData);
-    });
+    // Register form (for index.html)
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) {
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userData = {
+                username: document.getElementById('regUsername').value,
+                email: document.getElementById('regEmail').value,
+                full_name: document.getElementById('regFullName').value,
+                password: document.getElementById('regPassword').value
+            };
+            await register(userData);
+        });
+    }
     
-    // Show register
-    document.getElementById('showRegister').addEventListener('click', (e) => {
-        e.preventDefault();
-        document.getElementById('registerCard').style.display = 'block';
-        document.querySelector('.login-card:not(#registerCard)').style.display = 'none';
-    });
+    // Show register (for index.html)
+    const showRegister = document.getElementById('showRegister');
+    if (showRegister) {
+        showRegister.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('registerCard').style.display = 'block';
+            document.querySelector('.login-card:not(#registerCard)').style.display = 'none';
+        });
+    }
     
-    // Show login
-    document.getElementById('showLogin').addEventListener('click', (e) => {
-        e.preventDefault();
-        document.getElementById('registerCard').style.display = 'none';
-        document.querySelector('.login-card:not(#registerCard)').style.display = 'block';
-    });
+    // Show login (for index.html)
+    const showLogin = document.getElementById('showLogin');
+    if (showLogin) {
+        showLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('registerCard').style.display = 'none';
+            document.querySelector('.login-card:not(#registerCard)').style.display = 'block';
+        });
+    }
     
-    // Logout button
-    document.getElementById('logoutBtn').addEventListener('click', logout);
+    // Logout button (for index.html)
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
     
-    // Check auth on load
+    // Check auth on load (only for index.html)
+    // user.html has its own checkUserAuth in user.js
+    if (document.body.classList.contains('user-layout') || document.body.classList.contains('admin-layout')) {
+        // Skip checkAuth for user.html and admin.html - they have their own auth checks
+        return;
+    }
     checkAuth();
 });
 

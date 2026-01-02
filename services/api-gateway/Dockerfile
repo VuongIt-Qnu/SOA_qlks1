@@ -19,6 +19,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY services/api-gateway /app
 
+# Copy frontend files to /app/frontend
+# Try to copy from services/api-gateway/frontend first, then from root frontend
+COPY services/api-gateway/frontend /app/frontend
+
 ENV PYTHONPATH=/app
 
 # Expose port

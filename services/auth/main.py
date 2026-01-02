@@ -142,13 +142,29 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         (User.username == user_data.username) | (User.email == user_data.username)
     ).first()
     
-    if not user or not verify_password(user_data.password, user.hashed_password):
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password"
         )
     
-    if not user.is_active:
+    # Check if password hash is valid
+    if not user.hashed_password or not user.hashed_password.startswith(('$2a$', '$2b$', '$2y$')):
+        # Password hash is invalid, need to reset password
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password hash is invalid. Please contact administrator to reset your password."
+        )
+    
+    # Verify password
+    if not verify_password(user_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password"
+        )
+    
+    # Check if user is active (is_active can be NULL, treat NULL as active)
+    if user.is_active is False:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is disabled"
@@ -169,6 +185,44 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         token_type="bearer",
         user=UserResponse.model_validate(user)
     )
+
+
+@app.post("/reset-password")
+async def reset_password(request: dict, db: Session = Depends(get_db)):
+    """
+    Reset password for a user (for development/testing)
+    WARNING: In production, this should require authentication or be disabled
+    Body: {"username": "username", "new_password": "password"}
+    """
+    username = request.get("username")
+    new_password = request.get("new_password")
+    
+    if not username or not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="username and new_password are required"
+        )
+    
+    user = db.query(User).filter(
+        (User.username == username) | (User.email == username)
+    ).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Hash new password
+    user.hashed_password = hash_password(new_password)
+    user.is_active = True
+    db.commit()
+    db.refresh(user)
+    
+    return {
+        "message": "Password reset successfully",
+        "username": user.username
+    }
 
 
 @app.get("/me", response_model=UserResponse)
@@ -323,13 +377,44 @@ async def health_check():
 # Helper functions
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    return pwd_context.hash(password)
+    import bcrypt
+    
+    if not password:
+        raise ValueError("Password cannot be empty")
+    
+    # Bcrypt has a maximum password length of 72 bytes
+    # Convert to bytes and truncate if necessary
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    
+    # Generate salt and hash
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    
+    # Return as string (bcrypt hash is always valid UTF-8)
+    return hashed.decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against hash"""
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    return pwd_context.verify(plain_password, hashed_password)
+    import bcrypt
+    
+    # Check if hash is valid bcrypt format (should start with $2a$, $2b$, or $2y$)
+    if not hashed_password or not hashed_password.startswith(('$2a$', '$2b$', '$2y$')):
+        return False
+    
+    try:
+        # Convert to bytes
+        password_bytes = plain_password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        
+        hash_bytes = hashed_password.encode('utf-8')
+        
+        # Verify password
+        return bcrypt.checkpw(password_bytes, hash_bytes)
+    except (ValueError, TypeError, Exception) as e:
+        # Hash format is invalid (e.g., truncated or corrupted)
+        print(f"Password verification error: {e}")
+        return False

@@ -1,6 +1,9 @@
 // User interface functionality
 
-let currentUser = null;
+// Use window.currentUser as global variable to avoid conflicts
+if (typeof window.currentUser === 'undefined') {
+    window.currentUser = null;
+}
 let featuredRooms = [];
 
 // Initialize user interface
@@ -15,7 +18,7 @@ async function checkUserAuth() {
     const token = getToken();
     if (token) {
         try {
-            currentUser = await authAPI.getMe();
+            window.currentUser = await authAPI.getMe();
             showAuthenticatedUI();
         } catch (error) {
             console.error('Failed to load user info:', error);
@@ -64,79 +67,136 @@ function setupEventListeners() {
     });
     
     // Login form
-    document.getElementById('userLoginForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const username = document.getElementById('userLoginUsername').value;
-        const password = document.getElementById('userLoginPassword').value;
-        
-        try {
-            showLoading();
-            const response = await authAPI.login(username, password);
-            setToken(response.access_token);
-            showToast('Đăng nhập thành công', 'success');
-            closeLoginModal();
-            checkUserAuth();
+    const userLoginForm = document.getElementById('userLoginForm');
+    if (userLoginForm) {
+        userLoginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('userLoginUsername').value;
+            const password = document.getElementById('userLoginPassword').value;
             
-            // Check if admin, redirect to admin page
-            const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
-            
-            // Sử dụng router để điều hướng
-            if (typeof router !== 'undefined' && router.onLoginSuccess) {
-                router.onLoginSuccess(userRoles);
-            } else {
-                // Fallback
-                if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
-                    window.location.href = 'admin.html#dashboard';
-                } else {
-                    window.location.href = 'user.html#home';
-                }
+            if (!username || !password) {
+                showToast('Vui lòng điền đầy đủ thông tin', 'warning');
+                return;
             }
-        } catch (error) {
-            showToast(error.message || 'Đăng nhập thất bại', 'error');
-        } finally {
-            hideLoading();
-        }
-    });
+            
+            try {
+                showLoading();
+                const response = await authAPI.login(username, password);
+                setToken(response.access_token);
+                showToast('Đăng nhập thành công', 'success');
+                closeLoginModal();
+                checkUserAuth();
+                
+                // Check if admin, redirect to admin page
+                const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
+                
+                // Sử dụng router để điều hướng
+                if (typeof router !== 'undefined' && router.onLoginSuccess) {
+                    router.onLoginSuccess(userRoles);
+                } else {
+                    // Fallback
+                    if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
+                        window.location.href = 'admin.html#dashboard';
+                    } else {
+                        window.location.href = 'user.html#home';
+                    }
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                let errorMsg = error.message || 'Đăng nhập thất bại';
+                
+                // Translate common error messages to Vietnamese
+                if (errorMsg.includes('Incorrect username or password') || errorMsg.includes('incorrect')) {
+                    errorMsg = 'Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng kiểm tra lại.';
+                } else if (errorMsg.includes('disabled') || errorMsg.includes('account is disabled')) {
+                    errorMsg = 'Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.';
+                } else if (errorMsg.includes('Invalid token') || errorMsg.includes('token')) {
+                    errorMsg = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+                }
+                
+                showToast(errorMsg, 'error');
+                const errorEl = document.getElementById('userLoginError');
+                if (errorEl) {
+                    errorEl.textContent = errorMsg;
+                    errorEl.style.display = 'block';
+                    errorEl.style.color = '#ef4444';
+                }
+            } finally {
+                hideLoading();
+            }
+        });
+    }
     
     // Register form
-    document.getElementById('userRegisterForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const userData = {
-            username: document.getElementById('userRegUsername').value,
-            email: document.getElementById('userRegEmail').value,
-            full_name: document.getElementById('userRegFullName').value,
-            password: document.getElementById('userRegPassword').value,
-            role_name: 'customer'
-        };
-        
-        try {
-            showLoading();
-            const response = await authAPI.register(userData);
-            setToken(response.access_token);
-            showToast('Đăng ký thành công', 'success');
-            closeRegisterModal();
-            checkUserAuth();
+    const userRegisterForm = document.getElementById('userRegisterForm');
+    if (userRegisterForm) {
+        userRegisterForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userData = {
+                username: document.getElementById('userRegUsername').value,
+                email: document.getElementById('userRegEmail').value,
+                full_name: document.getElementById('userRegFullName').value,
+                password: document.getElementById('userRegPassword').value,
+                role_name: 'customer'
+            };
             
-            // Check user roles and redirect using router
-            const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
-            
-            // Sử dụng router để điều hướng
-            if (typeof router !== 'undefined' && router.onRegisterSuccess) {
-                router.onRegisterSuccess(userRoles);
-            } else {
-                // Fallback
-                if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
-                    window.location.href = 'admin.html#dashboard';
-                } else {
-                    window.location.href = 'user.html#home';
-                }
+            if (!userData.username || !userData.email || !userData.full_name || !userData.password) {
+                showToast('Vui lòng điền đầy đủ thông tin', 'warning');
+                return;
             }
-        } catch (error) {
-            showToast(error.message || 'Đăng ký thất bại', 'error');
-        } finally {
-            hideLoading();
-        }
-    });
+            
+            if (userData.password.length < 6) {
+                showToast('Mật khẩu phải có ít nhất 6 ký tự', 'warning');
+                return;
+            }
+            
+            try {
+                showLoading();
+                const response = await authAPI.register(userData);
+                setToken(response.access_token);
+                showToast('Đăng ký thành công', 'success');
+                closeRegisterModal();
+                checkUserAuth();
+                
+                // Check user roles and redirect using router
+                const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
+                
+                // Sử dụng router để điều hướng
+                if (typeof router !== 'undefined' && router.onRegisterSuccess) {
+                    router.onRegisterSuccess(userRoles);
+                } else {
+                    // Fallback
+                    if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
+                        window.location.href = 'admin.html#dashboard';
+                    } else {
+                        window.location.href = 'user.html#home';
+                    }
+                }
+            } catch (error) {
+                console.error('Register error:', error);
+                let errorMsg = error.message || 'Đăng ký thất bại';
+                
+                // Translate common error messages to Vietnamese
+                if (errorMsg.includes('already registered') || errorMsg.includes('Username or email already registered')) {
+                    errorMsg = 'Tên đăng nhập hoặc email đã được sử dụng. Vui lòng chọn tên khác.';
+                } else if (errorMsg.includes('email')) {
+                    errorMsg = 'Email không hợp lệ hoặc đã được sử dụng.';
+                } else if (errorMsg.includes('username')) {
+                    errorMsg = 'Tên đăng nhập không hợp lệ hoặc đã được sử dụng.';
+                }
+                
+                showToast(errorMsg, 'error');
+                const errorEl = document.getElementById('userRegisterError');
+                if (errorEl) {
+                    errorEl.textContent = errorMsg;
+                    errorEl.style.display = 'block';
+                    errorEl.style.color = '#ef4444';
+                }
+            } finally {
+                hideLoading();
+            }
+        });
+    }
 }
 
 // Show user page
@@ -376,7 +436,7 @@ function showBookingModalForUser(roomTypeId, roomId, checkIn, checkOut, guests) 
         e.preventDefault();
         
         // Get customer ID (in real app, from current user)
-        const customerId = currentUser?.id || 1;
+        const customerId = window.currentUser?.id || 1;
         
         const bookingData = {
             customer_id: customerId,
@@ -419,23 +479,57 @@ function searchRooms() {
 
 // Show login modal
 function showLoginModal() {
-    document.getElementById('loginModal').style.display = 'flex';
+    const modal = document.getElementById('loginModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // Clear form
+        const form = document.getElementById('userLoginForm');
+        if (form) {
+            form.reset();
+        }
+        // Clear error
+        const errorEl = document.getElementById('userLoginError');
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.style.display = 'none';
+        }
+    }
 }
 
 // Close login modal
 function closeLoginModal() {
-    document.getElementById('loginModal').style.display = 'none';
+    const modal = document.getElementById('loginModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }
 
 // Show register modal
 function showRegisterModal() {
     closeLoginModal();
-    document.getElementById('registerModal').style.display = 'flex';
+    const modal = document.getElementById('registerModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // Clear form
+        const form = document.getElementById('userRegisterForm');
+        if (form) {
+            form.reset();
+        }
+        // Clear error
+        const errorEl = document.getElementById('userRegisterError');
+        if (errorEl) {
+            errorEl.textContent = '';
+            errorEl.style.display = 'none';
+        }
+    }
 }
 
 // Close register modal
 function closeRegisterModal() {
-    document.getElementById('registerModal').style.display = 'none';
+    const modal = document.getElementById('registerModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }
 
 // Close booking modal
@@ -446,7 +540,7 @@ function closeBookingModal() {
 // Logout
 function logout() {
     removeToken();
-    currentUser = null;
+    window.currentUser = null;
     showUnauthenticatedUI();
     showToast('Đã đăng xuất', 'info');
     showUserPage('home');
