@@ -43,6 +43,16 @@ CUSTOMER_SERVICE_URL = os.getenv("CUSTOMER_SERVICE_URL", "http://customer-servic
 Base.metadata.create_all(bind=engine)
 
 
+def require_admin(current_user: dict):
+    """Check if user is admin"""
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles and "manager" not in user_roles and "receptionist" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin, manager, or receptionist can access reports"
+        )
+
+
 @app.get("/reports/revenue")
 async def get_revenue_report(
     request: Request,
@@ -53,12 +63,15 @@ async def get_revenue_report(
     db: Session = Depends(get_db)
 ):
     """
-    Get revenue report by period
+    Get revenue report by period (Doanh thu)
     
     - **period**: day, month, or year
     - **start_date**: Start date (ISO format, optional)
     - **end_date**: End date (ISO format, optional)
+    
+    Note: Only admin, manager, or receptionist can access reports.
     """
+    require_admin(current_user)
     # Get token for inter-service calls
     token = await get_token(request)
     auth_header = {"Authorization": f"Bearer {token}"}
@@ -131,6 +144,87 @@ async def get_revenue_report(
         )
 
 
+@app.get("/reports/revenue/daily")
+async def get_revenue_daily(
+    request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get daily revenue report (Doanh thu theo ngày)
+    
+    - **start_date**: Start date (ISO format, optional - defaults to 7 days ago)
+    - **end_date**: End date (ISO format, optional - defaults to today)
+    
+    Note: Only admin, manager, or receptionist can access reports.
+    """
+    require_admin(current_user)
+    return await get_revenue_report(
+        request=request,
+        period="day",
+        start_date=start_date,
+        end_date=end_date,
+        current_user=current_user,
+        db=db
+    )
+
+
+@app.get("/reports/revenue/monthly")
+async def get_revenue_monthly(
+    request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get monthly revenue report (Doanh thu theo tháng)
+    
+    - **start_date**: Start date (ISO format, optional - defaults to 30 days ago)
+    - **end_date**: End date (ISO format, optional - defaults to today)
+    
+    Note: Only admin, manager, or receptionist can access reports.
+    """
+    require_admin(current_user)
+    return await get_revenue_report(
+        request=request,
+        period="month",
+        start_date=start_date,
+        end_date=end_date,
+        current_user=current_user,
+        db=db
+    )
+
+
+@app.get("/reports/revenue/yearly")
+async def get_revenue_yearly(
+    request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get yearly revenue report (Doanh thu theo năm)
+    
+    - **start_date**: Start date (ISO format, optional - defaults to 1 year ago)
+    - **end_date**: End date (ISO format, optional - defaults to today)
+    
+    Note: Only admin, manager, or receptionist can access reports.
+    """
+    require_admin(current_user)
+    return await get_revenue_report(
+        request=request,
+        period="year",
+        start_date=start_date,
+        end_date=end_date,
+        current_user=current_user,
+        db=db
+    )
+
+
 @app.get("/reports/bookings")
 async def get_booking_report(
     request: Request,
@@ -140,11 +234,14 @@ async def get_booking_report(
     db: Session = Depends(get_db)
 ):
     """
-    Get booking statistics report
+    Get booking statistics report (Thống kê booking)
     
     - **start_date**: Start date (ISO format)
     - **end_date**: End date (ISO format)
+    
+    Note: Only admin, manager, or receptionist can access reports.
     """
+    require_admin(current_user)
     # Get token for inter-service calls
     token = await get_token(request)
     auth_header = {"Authorization": f"Bearer {token}"}
@@ -205,7 +302,10 @@ async def get_room_occupancy_report(
 ):
     """
     Get room occupancy statistics and occupancy rate
+    
+    Note: Only admin, manager, or receptionist can access reports.
     """
+    require_admin(current_user)
     # Get token for inter-service calls
     token = await get_token(request)
     auth_header = {"Authorization": f"Bearer {token}"}
@@ -257,7 +357,10 @@ async def get_occupancy_rate_by_date(
     Get occupancy rate by date range
     
     Calculates daily occupancy rate for the specified date range
+    
+    Note: Only admin, manager, or receptionist can access reports.
     """
+    require_admin(current_user)
     # Get token for inter-service calls
     token = await get_token(request)
     auth_header = {"Authorization": f"Bearer {token}"}
@@ -331,7 +434,10 @@ async def get_dashboard_data(
 ):
     """
     Get dashboard summary data with all key metrics
+    
+    Note: Only admin, manager, or receptionist can access reports.
     """
+    require_admin(current_user)
     try:
         # Get all reports
         revenue_data = await get_revenue_report(

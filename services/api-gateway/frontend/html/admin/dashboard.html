@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Admin Dashboard</title>
+
+    <link rel="stylesheet" href="/css/admin.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/js/all.min.js" defer></script>
+    <script src="/js/dashboard.js" defer></script>
+</head>
+
+<body>
+
+    <!-- Layout sẽ load tự động vào đây -->
+    <div id="adminLayout"></div>
+
+    <!-- ===== MAIN CONTENT ===== -->
+    <main class="main">
+
+        <h1 class="title">Dashboard Overview</h1>
+        <p class="subtitle">Welcome back! Here's what's happening with your hotel today.</p>
+
+        <!-- ===== SUMMARY CARDS ===== -->
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="card-icon"><i class="fa-solid fa-door-open"></i></div>
+                <div class="highlight">48% Free</div>
+                <div class="small-text">Rooms Available</div>
+                <div class="progress-bar"><div style="width:48%"></div></div>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon green"><i class="fa-solid fa-calendar-check"></i></div>
+                <div class="highlight">26</div>
+                <div class="small-text">Current Bookings</div>
+                <span class="status active">Active</span>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon purple"><i class="fa-solid fa-dollar-sign"></i></div>
+                <div class="highlight">$45,800</div>
+                <div class="small-text">$12,400 this month</div>
+            </div>
+
+            <div class="summary-card">
+                <div class="card-icon orange"><i class="fa-solid fa-clock"></i></div>
+                <div class="small-text">Today's Activity</div>
+                <p class="highlight">Check-ins 8 • Check-outs 5</p>
+            </div>
+        </div>
+
+        <!-- ===== LOWER CONTENT ===== -->
+        <div class="lower-grid">
+            <div class="recent-box">
+                <h3>Recent Bookings</h3>
+
+                <div class="booking-item">
+                    <i class="fa-solid fa-user booking-icon"></i>
+                    <div>
+                        <div class="booking-name">John Smith</div>
+                        <div class="booking-detail">Deluxe Room 305</div>
+                    </div>
+                    <div class="date">Nov 1, 2025</div>
+                    <span class="badge success">Confirmed</span>
+                </div>
+
+                <div class="booking-item">
+                    <i class="fa-solid fa-user booking-icon"></i>
+                    <div>
+                        <div class="booking-name">Emma Wilson</div>
+                        <div class="booking-detail">Suite Room 501</div>
+                    </div>
+                    <div class="date">Nov 2, 2025</div>
+                    <span class="badge warning">Pending</span>
+                </div>
+
+            </div>
+
+            <div class="action-box">
+                <div class="action-btn"><i class="fa-solid fa-calendar-plus"></i><br>New Booking</div>
+                <div class="action-btn"><i class="fa-solid fa-bed"></i><br>Room Status</div>
+                <div class="action-btn"><i class="fa-solid fa-user-check"></i><br>Check-in Guest</div>
+                <div class="action-btn"><i class="fa-solid fa-file-invoice"></i><br>Generate Invoice</div>
+            </div>
+        </div>
+
+        <!-- ===== ROOM STATUS OVERVIEW ===== -->
+        <div class="room-status-box">
+            <h3>Room Status Overview</h3>
+
+            <div class="status-grid">
+                <div class="status-card green">
+                    <h2>24</h2>
+                    <p>Available</p>
+                </div>
+
+                <div class="status-card blue">
+                    <h2>20</h2>
+                    <p>Occupied</p>
+                </div>
+
+                <div class="status-card yellow">
+                    <h2>4</h2>
+                    <p>Cleaning</p>
+                </div>
+
+                <div class="status-card red">
+                    <h2>2</h2>
+                    <p>Maintenance</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Quản Lý Khách Sạn - SOA</title>
+</head>
+<body>
+    <!-- Loading indicator -->
+    <div style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: Arial, sans-serif;">
+        <div style="text-align: center;">
+            <div style="border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px;"></div>
+            <p>Đang tải...</p>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // Redirect logic: Always redirect to user.html or admin.html based on authentication
+            function checkAuthAndRedirect() {
+                // Get token from localStorage
+                const token = localStorage.getItem('auth_token');
+                
+                    if (!token) {
+                        // No token → redirect to standalone login page
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                
+                // Has token → decode JWT to get roles
+                try {
+                    const base64Url = token.split('.')[1];
+                    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                    }).join(''));
+                    const payload = JSON.parse(jsonPayload);
+                    
+                    // Check if token expired
+                    const exp = payload.exp;
+                    if (exp && exp * 1000 < Date.now()) {
+                        localStorage.removeItem('auth_token');
+                        window.location.href = 'login.html';
+                        return;
+                    }
+                    
+                    const roles = payload.roles || [];
+                    const isAdmin = roles.includes('admin') || 
+                                   roles.includes('manager') || 
+                                   roles.includes('receptionist');
+                    
+                    // Redirect based on role
+                    if (isAdmin) {
+                        window.location.href = 'admin/admin.html#dashboard';
+                    } else {
+                        window.location.href = 'user/user.html#home';
+                    }
+                } catch (e) {
+                    // Invalid token format, remove it and redirect to login
+                    console.error('Invalid token format:', e);
+                    localStorage.removeItem('auth_token');
+                    window.location.href = 'login.html';
+                }
+            }
+            
+            // Run immediately
+            checkAuthAndRedirect();
+        })();
+    </script>
+    
+    <style>
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</body>
+</html>

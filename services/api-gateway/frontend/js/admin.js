@@ -1,5 +1,10 @@
 // Admin Dashboard functionality
 
+// Use window.currentUser as global variable to avoid conflicts
+if (typeof window.currentUser === 'undefined') {
+    window.currentUser = null;
+}
+
 // Show admin page
 function showAdminPage(pageName) {
     document.querySelectorAll('.admin-page').forEach(page => {
@@ -48,13 +53,51 @@ function loadAdminPageData(pageName) {
 // Load admin dashboard
 async function loadAdminDashboard() {
     try {
+        // Check if user is authenticated
+        const token = getToken();
+        if (!token) {
+            console.error('No token found, redirecting to login');
+            window.location.href = 'user.html#login';
+            return;
+        }
+        
         showLoading();
         const [rooms, bookings, payments, customers] = await Promise.all([
-            roomAPI.getRooms().catch(() => []),
-            bookingAPI.getAll().catch(() => []),
-            paymentAPI.getAll({ payment_status: 'completed' }).catch(() => []),
-            customerAPI.getAll().catch(() => [])
+            roomAPI.getRooms().catch((err) => {
+                console.error('Failed to load rooms:', err);
+                return [];
+            }),
+            bookingAPI.getAll().catch((err) => {
+                console.error('Failed to load bookings:', err);
+                return [];
+            }),
+            paymentAPI.getAll({ payment_status: 'completed' }).catch((err) => {
+                console.error('Failed to load payments:', err);
+                return [];
+            }),
+            customerAPI.getAll().catch((err) => {
+                console.error('Failed to load customers:', err);
+                return [];
+            })
         ]);
+        
+        // Check if any critical errors occurred
+        const hasAuthError = [rooms, bookings, payments, customers].some(
+            result => result === null || (Array.isArray(result) && result.length === 0 && result.error)
+        );
+        
+        if (hasAuthError) {
+            // Check if it's an authentication issue
+            const tokenCheck = getToken();
+            if (!tokenCheck) {
+                showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+                removeToken();
+                setTimeout(() => {
+                    window.location.href = 'user.html#login';
+                }, 2000);
+                return;
+            }
+        }
         
         // Calculate metrics
         const totalRooms = rooms.length;
@@ -215,38 +258,77 @@ document.addEventListener('DOMContentLoaded', () => {
 // Check admin access
 async function checkAdminAccess() {
     const token = getToken();
+    console.log('checkAdminAccess - Token exists:', !!token);
+    console.log('checkAdminAccess - Token value:', token ? token.substring(0, 20) + '...' : 'null');
+    
     if (!token) {
-        // Chưa đăng nhập → redirect về user.html để login
-        window.location.href = 'user.html#login';
+        console.error('No token found, redirecting to login');
+        // Chưa đăng nhập → redirect về login.html
+        window.location.href = '/login.html';
         return;
     }
     
-    // Check roles from JWT token
+    // Check roles from JWT token (already normalized in getUserRoles)
     const roles = getUserRoles();
-    const isAdmin = roles.includes('admin') || 
-                   roles.includes('manager') || 
-                   roles.includes('receptionist');
+    console.log('checkAdminAccess - User roles:', roles);
+    
+    // Check admin roles using helper function (consistent check)
+    const isAdmin = typeof checkIsAdmin !== 'undefined' 
+        ? checkIsAdmin(roles) 
+        : roles.some(role => ['admin', 'manager', 'receptionist'].includes(role));
+    console.log('checkAdminAccess - Is admin?', isAdmin, 'roles:', roles);
     
     if (!isAdmin) {
-        // Không phải admin → redirect về user.html
-        window.location.href = 'user.html#home';
+        console.warn('User is not admin, redirecting to user page');
+        // Không phải admin → redirect về user/user.html#home
+        window.location.href = '/user/user.html#home';
         return;
     }
     
     try {
+        console.log('Calling authAPI.getMe()...');
         const user = await authAPI.getMe();
-        currentUser = user;
+        console.log('authAPI.getMe() success:', user);
+        window.currentUser = user;
         // Load dashboard
         loadAdminDashboard();
     } catch (error) {
         console.error('Failed to load user info:', error);
+        console.error('Error status:', error.status);
+        console.error('Error message:', error.message);
+        
         // Token có thể hết hạn → redirect về login
-        if (error.message && error.message.includes('401')) {
-            window.location.href = 'user.html#login';
+        if (error.status === 401 || error.status === 403 || 
+            (error.message && (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('403')))) {
+            console.error('Authentication failed, removing token and redirecting to login');
+            removeToken();
+            showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 2000);
             return;
         }
-        // Still allow access if token is valid
+        // Still allow access if token is valid (roles are in JWT)
+        // Just log the error but continue
+        console.warn('Could not load user info, but token is valid. Continuing...');
         loadAdminDashboard();
+    }
+}
+
+// Initialize admin page when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        // Check admin access when admin.html loads
+        if (window.location.pathname.includes('admin.html')) {
+            console.log('Admin.js: Admin page loaded, checking access...');
+            checkAdminAccess();
+        }
+    });
+} else {
+    // DOM already loaded
+    if (window.location.pathname.includes('admin.html')) {
+        console.log('Admin.js: Admin page already loaded, checking access...');
+        checkAdminAccess();
     }
 }
 

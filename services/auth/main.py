@@ -16,7 +16,7 @@ from database import get_db, Base, engine
 from shared.utils.jwt_handler import create_access_token, verify_token
 from shared.common.dependencies import get_current_user
 from models import User, Role
-from schemas import UserCreate, UserLogin, Token, UserResponse, RoleCreate, RoleResponse
+from schemas import UserCreate, UserUpdate, UserLogin, Token, UserResponse, RoleCreate, RoleResponse
 
 app = FastAPI(
     title="Auth Service",
@@ -116,7 +116,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     roles = [r.name for r in new_user.roles]
     access_token = create_access_token(
         data={
-            "sub": new_user.id,
+            "sub": str(new_user.id),  # JWT requires sub to be a string
             "username": new_user.username,
             "roles": roles
         }
@@ -174,7 +174,7 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
     roles = [r.name for r in user.roles]
     access_token = create_access_token(
         data={
-            "sub": user.id,
+            "sub": str(user.id),  # JWT requires sub to be a string
             "username": user.username,
             "roles": roles
         }
@@ -230,7 +230,7 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user), 
     """
     Get current authenticated user information
     """
-    user = db.query(User).filter(User.id == current_user["sub"]).first()
+    user = db.query(User).filter(User.id == int(current_user["sub"])).first()
     
     if not user:
         raise HTTPException(
@@ -239,6 +239,19 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user), 
         )
     
     return UserResponse.model_validate(user)
+
+
+@app.post("/logout")
+async def logout(current_user: dict = Depends(get_current_user)):
+    """
+    Logout user
+    Note: With stateless JWT, logout is primarily handled client-side by removing the token.
+    This endpoint provides a confirmation response.
+    """
+    return {
+        "message": "Logout successful",
+        "detail": "Token should be removed from client storage"
+    }
 
 
 @app.get("/users", response_model=List[UserResponse])
@@ -259,6 +272,109 @@ async def get_all_users(
     
     users = db.query(User).all()
     return [UserResponse.model_validate(user) for user in users]
+
+
+@app.get("/users/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get user by ID (Admin only)
+    """
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can access this endpoint"
+        )
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return UserResponse.model_validate(user)
+
+
+@app.put("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update user information (Admin only)
+    """
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can update users"
+        )
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Update user fields
+    update_data = user_data.dict(exclude_unset=True, exclude={'password'})
+    for field, value in update_data.items():
+        setattr(user, field, value)
+    
+    # Handle password update separately
+    if user_data.password:
+        user.hashed_password = hash_password(user_data.password)
+    
+    db.commit()
+    db.refresh(user)
+    
+    return UserResponse.model_validate(user)
+
+
+@app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete user (Admin only)
+    """
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can delete users"
+        )
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Prevent deleting yourself
+    if user.id == int(current_user.get("sub")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+    
+    db.delete(user)
+    db.commit()
+    return None
 
 
 @app.get("/roles", response_model=List[RoleResponse])

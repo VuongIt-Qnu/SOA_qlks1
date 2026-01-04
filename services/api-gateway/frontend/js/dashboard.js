@@ -1,133 +1,77 @@
-// Dashboard functionality
+document.addEventListener("DOMContentLoaded", function() {
+    fetchDashboardData();
+});
 
-let revenueChart = null;
-let bookingStatusChart = null;
-
-// Load dashboard data
-async function loadDashboard() {
+async function fetchDashboardData() {
     try {
-        showLoading();
-        // Load stats
-        const [rooms, bookings, payments, customers, dashboardData] = await Promise.all([
-            roomAPI.getRooms().catch(() => []),
-            bookingAPI.getAll().catch(() => []),
-            paymentAPI.getAll({ payment_status: 'completed' }).catch(() => []),
-            customerAPI.getAll().catch(() => []),
-            reportAPI.getDashboard().catch(() => null)
-        ]);
-        
-        // Update stats
-        document.getElementById('totalRooms').textContent = rooms.length;
-        document.getElementById('totalBookings').textContent = bookings.length;
-        document.getElementById('totalCustomers').textContent = customers.length;
-        
-        // Calculate total revenue
-        const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
-        document.getElementById('totalRevenue').textContent = formatCurrency(totalRevenue);
-        
-        // Load charts
-        loadCharts(bookings, payments);
+        const response = await fetch('http://localhost:8080/api/admin/dashboard');
+        if (!response.ok) throw new Error("Failed to load dashboard data");
+
+        const data = await response.json();
+        updateUI(data);
+
     } catch (error) {
-        console.error('Failed to load dashboard:', error);
-        showToast('Không thể tải dữ liệu dashboard', 'error');
-    } finally {
-        hideLoading();
+        console.error("Error:", error);
     }
 }
 
-// Load charts
-function loadCharts(bookings, payments) {
-    // Revenue chart
-    const revenueCtx = document.getElementById('revenueChart');
-    if (revenueCtx) {
-        if (revenueChart) {
-            revenueChart.destroy();
-        }
-        
-        // Group payments by date
-        const revenueByDate = {};
-        payments.forEach(payment => {
-            const date = new Date(payment.created_at).toLocaleDateString('vi-VN');
-            revenueByDate[date] = (revenueByDate[date] || 0) + payment.amount;
-        });
-        
-        revenueChart = new Chart(revenueCtx, {
-            type: 'line',
-            data: {
-                labels: Object.keys(revenueByDate),
-                datasets: [{
-                    label: 'Doanh Thu (VND)',
-                    data: Object.values(revenueByDate),
-                    borderColor: 'rgb(37, 99, 235)',
-                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: true
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    }
+// Biến toàn cục để lưu biểu đồ (giúp hủy biểu đồ cũ khi vẽ lại)
+let roomChartInstance = null;
+function updateUI(data) {
+    // ... (Các phần cập nhật Summary Cards cũ giữ nguyên) ...
+    setText('valAvailableRooms', `${data.availableRooms} / ${data.totalRooms}`);
+    setText('valActiveBookings', data.activeBookings);
+    setText('valTotalBookings', data.totalBookings);
     
-    // Booking status chart
-    const bookingStatusCtx = document.getElementById('bookingStatusChart');
-    if (bookingStatusCtx) {
-        if (bookingStatusChart) {
-            bookingStatusChart.destroy();
-        }
-        
-        const statusCounts = {
-            'pending': 0,
-            'confirmed': 0,
-            'cancelled': 0,
-            'completed': 0
-        };
-        
-        bookings.forEach(booking => {
-            statusCounts[booking.status] = (statusCounts[booking.status] || 0) + 1;
-        });
-        
-        bookingStatusChart = new Chart(bookingStatusCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Chờ Xử Lý', 'Đã Xác Nhận', 'Đã Hủy', 'Hoàn Thành'],
-                datasets: [{
-                    data: [
-                        statusCounts.pending,
-                        statusCounts.confirmed,
-                        statusCounts.cancelled,
-                        statusCounts.completed
-                    ],
-                    backgroundColor: [
-                        'rgba(245, 158, 11, 0.8)',
-                        'rgba(16, 185, 129, 0.8)',
-                        'rgba(239, 68, 68, 0.8)',
-                        'rgba(37, 99, 235, 0.8)'
-                    ]
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-    }
+    const revenue = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.totalRevenue);
+    setText('valTotalRevenue', revenue);
+
+    // --- CẬP NHẬT ROOM STATUS (MỚI) ---
+    // Điền số liệu vào 3 dòng
+    setText('statEmpty', data.availableRooms);       // Empty
+    setText('statRented', data.occupiedRooms);       // Rented
+    setText('statMaintenance', data.maintenanceRooms || 0); // Maintenance
+
+    // --- VẼ BIỂU ĐỒ (Cập nhật màu sắc cho khớp) ---
+    renderRoomChart(data.availableRooms, data.occupiedRooms, data.maintenanceRooms || 0);
+
+    // ... (Phần Recent Bookings giữ nguyên) ...
 }
 
-// Export
-window.loadDashboard = loadDashboard;
+// Cập nhật hàm vẽ biểu đồ để có 3 màu
+function renderRoomChart(empty, rented, maintenance) {
+    const ctx = document.getElementById('roomStatusChart');
+    if (!ctx) return;
 
+    if (roomChartInstance) {
+        roomChartInstance.destroy();
+    }
+
+    roomChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Empty', 'Rented', 'Maintenance'],
+            datasets: [{
+                data: [empty, rented, maintenance],
+                backgroundColor: [
+                    '#27ae60', // Xanh lá (Empty)
+                    '#f1c40f', // Vàng cam (Rented)
+                    '#95a5a6'  // Xám (Maintenance)
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false } // Ẩn chú thích vì đã có list bên trên
+            },
+            cutout: '70%' // Làm vòng tròn mỏng hơn cho đẹp
+        }
+    });
+}
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if(el) el.innerText = value;
+}

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Revenue Report</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"/>
+    <link rel="stylesheet" href="/css/admin.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        .filter-container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-end;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .form-group label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #555;
+        }
+        .filter-select, .filter-input {
+            padding: 8px 12px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+            min-width: 150px;
+        }
+        .btn-filter {
+            padding: 9px 20px;
+            background-color: #4b7bec;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        .btn-filter:hover { background-color: #3867d6; }
+
+        .filter-container {
+            display: flex;
+            align-items: flex-end; /* Quan trọng: Căn các phần tử xuống đáy */
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <div id="adminLayout"></div>
+
+    <main class="main">
+        <h2 class="title">Báo Cáo Doanh Thu</h2>
+        
+        <div class="filter-container">
+            <div class="form-group">
+                <label>Xem theo:</label>
+                <select id="reportType" class="filter-select" onchange="loadRevenueChart()">
+                    <option value="daily">Theo Ngày</option>
+                    <option value="monthly" selected>Theo Tháng</option>
+                    <option value="yearly">Theo Năm</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Từ ngày:</label>
+                <input type="date" id="fromDate" class="filter-input">
+            </div>
+
+            <div class="form-group">
+                <label>Đến ngày:</label>
+                <input type="date" id="toDate" class="filter-input">
+            </div>
+
+            <div class="form-group">
+                <label>&nbsp;</label> <button class="btn-filter" onclick="loadRevenueChart()">
+                    <i class="fa-solid fa-filter"></i> Lọc dữ liệu
+                </button>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+            <div class="table-container">
+                <h3 id="chartTitle">Biểu đồ doanh thu</h3>
+                <canvas id="revenueChart"></canvas>
+            </div>
+
+            <div class="table-container">
+                <h3>Tỷ trọng theo Loại phòng</h3>
+                <canvas id="roomTypeChart"></canvas>
+            </div>
+        </div>
+    </main>
+
+   <script>
+    let revenueChartInstance = null;
+    let roomTypeChartInstance = null;
+
+    // Lấy header Authorization từ token đã lưu sau khi login
+    function getAuthHeaders() {
+        const token = localStorage.getItem('token');
+        const headers = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        return headers;
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        // 1. Gắn sự kiện khi đổi loại báo cáo
+        document.getElementById('reportType').addEventListener('change', autoSetDateRange);
+
+        // 2. Chạy lần đầu để set ngày mặc định
+        autoSetDateRange();
+
+        // 3. Tải biểu đồ
+        loadRevenueChart();
+        loadRoomTypeChart();
+    });
+
+    // --- HÀM 1: TỰ ĐỘNG TÍNH NGÀY (LOGIC MỚI: LÙI VỀ QUÁ KHỨ) ---
+    function autoSetDateRange() {
+        const type = document.getElementById('reportType').value;
+        const fromDateInput = document.getElementById('fromDate');
+        const toDateInput = document.getElementById('toDate');
+
+        // Lấy ngày hiện tại
+        const today = new Date();
+
+        // 1. "Đến ngày" luôn là ngày hiện tại
+        toDateInput.valueAsDate = today;
+
+        // 2. Tính toán "Từ ngày" bằng cách TRỪ đi thời gian
+        let pastDate = new Date(today); // Copy ngày hiện tại ra để trừ
+
+        if (type === 'daily') {
+            // Ngày: Lùi lại 1 ngày
+            pastDate.setDate(today.getDate() - 1);
+        } 
+        else if (type === 'monthly') {
+            // Tháng: Lùi lại 30 ngày
+            pastDate.setDate(today.getDate() - 30);
+        } 
+        else if (type === 'yearly') {
+            // Năm: Lùi lại 1 năm
+            pastDate.setFullYear(today.getFullYear() - 1);
+        }
+
+        // Set giá trị vào ô input "Từ ngày"
+        fromDateInput.valueAsDate = pastDate;
+    }
+
+    // --- HÀM 2: GỌI API VÀ VẼ BIỂU ĐỒ ---
+    function loadRevenueChart() {
+        const type = document.getElementById('reportType').value;
+        const from = document.getElementById('fromDate').value;
+        const to = document.getElementById('toDate').value;
+
+        // Gọi API
+        const url = `/api/reports/revenue?type=${type}&from=${from}&to=${to}`;
+
+        // Cập nhật tiêu đề
+        const typeText = type === 'daily' ? 'NGÀY' : (type === 'yearly' ? 'NĂM' : 'THÁNG');
+        document.getElementById('chartTitle').innerText = `Doanh thu theo ${typeText}`;
+
+        fetch(url, { headers: getAuthHeaders() })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`Lỗi tải dữ liệu (${res.status})`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                const labels = data.map(item => item.timeLabel);
+                const revenues = data.map(item => item.revenue);
+
+                const ctx = document.getElementById('revenueChart').getContext('2d');
+                if (revenueChartInstance) revenueChartInstance.destroy();
+
+                revenueChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Doanh thu (VNĐ)',
+                            data: revenues,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)', // Màu xanh dương nhạt
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            barThickness: 40 // Độ rộng cột
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(context.raw);
+                                    }
+                                }
+                            },
+                            legend: { display: true }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return new Intl.NumberFormat('vi-VN', { notation: "compact" }).format(value) + 'đ';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            })
+            .catch(err => console.error("Lỗi tải biểu đồ:", err));
+    }
+
+    // --- HÀM 3: BIỂU ĐỒ TRÒN (LOẠI PHÒNG) ---
+    function loadRoomTypeChart() {
+        fetch('/api/reports/revenue/room-type', { headers: getAuthHeaders() })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`Lỗi tải dữ liệu (${res.status})`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                const labels = data.map(item => item.timeLabel);
+                const revenues = data.map(item => item.revenue);
+
+                const ctx = document.getElementById('roomTypeChart').getContext('2d');
+                if (roomTypeChartInstance) roomTypeChartInstance.destroy();
+
+                roomTypeChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: revenues,
+                            backgroundColor: [
+                                '#ff7675', '#74b9ff', '#55efc4', '#ffeaa7', '#a29bfe'
+                            ],
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { position: 'bottom' },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const val = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(context.raw);
+                                        return ` ${context.label}: ${val}`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            })
+            .catch(err => console.error("Lỗi:", err));
+    }
+</script>
+</body>
+</html>

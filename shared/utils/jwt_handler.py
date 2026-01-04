@@ -5,12 +5,12 @@ Using python-jose library (compatible with FastAPI)
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt
-from jose.exceptions import JWTError
+from jose.exceptions import JWTError, ExpiredSignatureError
 import os
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # Default 24 hours (1440 minutes)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -48,7 +48,14 @@ def verify_token(token: str) -> Optional[dict]:
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         return payload
-    except JWTError:
+    except jwt.ExpiredSignatureError:
+        print(f"[JWT] Token expired")
+        return None
+    except jwt.JWTError as e:
+        print(f"[JWT] Token verification failed: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"[JWT] Unexpected error verifying token: {str(e)}")
         return None
 
 
@@ -64,6 +71,9 @@ def get_user_id_from_token(token: str) -> Optional[int]:
     """
     payload = verify_token(token)
     if payload:
-        return payload.get("sub")  # 'sub' is standard JWT claim for subject/user_id
+        sub = payload.get("sub")
+        # Convert to int if sub is string (JWT requires sub to be string)
+        if sub:
+            return int(sub) if isinstance(sub, str) else sub
     return None
 

@@ -6,6 +6,14 @@ let filteredBookings = [];
 // Load bookings
 async function loadBookings() {
     try {
+        // Check if user is authenticated
+        const token = getToken();
+        if (!token) {
+            console.error('No token found, redirecting to login');
+            window.location.href = 'user.html#login';
+            return;
+        }
+        
         showLoading();
         bookings = await bookingAPI.getAll();
         filteredBookings = [...bookings];
@@ -13,7 +21,17 @@ async function loadBookings() {
         setupBookingSearch();
     } catch (error) {
         console.error('Failed to load bookings:', error);
-        showToast('Không thể tải danh sách đặt phòng', 'error');
+        
+        // Check if it's an authentication error
+        if (error.status === 401 || error.status === 403 || error.message?.includes('Unauthorized')) {
+            showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            removeToken();
+            setTimeout(() => {
+                window.location.href = 'user.html#login';
+            }, 2000);
+        } else {
+            showToast(error.message || 'Không thể tải danh sách đặt phòng', 'error');
+        }
     } finally {
         hideLoading();
     }

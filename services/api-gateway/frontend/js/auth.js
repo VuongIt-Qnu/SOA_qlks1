@@ -1,6 +1,3 @@
-// Auth functionality
-// Note: currentUser is declared in user.js to avoid duplicate declaration
-// We use window.currentUser as a global variable
 if (typeof window.currentUser === 'undefined') {
     window.currentUser = null;
 }
@@ -19,13 +16,25 @@ function checkAuth() {
 // Load user info
 async function loadUserInfo() {
     try {
+        console.log('[loadUserInfo] Calling authAPI.getMe()...');
         window.currentUser = await authAPI.getMe();
+        console.log('[loadUserInfo] User info loaded:', window.currentUser);
         if (document.getElementById('userInfo')) {
             document.getElementById('userInfo').textContent = `Xin chào, ${window.currentUser.username}`;
         }
     } catch (error) {
-        console.error('Failed to load user info:', error);
-        logout();
+        console.error('[loadUserInfo] Failed to load user info:', error);
+        console.error('[loadUserInfo] Error status:', error.status);
+        console.error('[loadUserInfo] Error message:', error.message);
+        
+        // Only logout if it's a real authentication error (401/403)
+        if (error.status === 401 || error.status === 403) {
+            console.warn('[loadUserInfo] Authentication failed, logging out');
+            logout();
+        } else {
+            // For other errors, just log and continue
+            console.warn('[loadUserInfo] Non-auth error, not logging out');
+        }
     }
 }
 
@@ -77,34 +86,201 @@ function showLoginUI() {
 // Login
 async function login(username, password) {
     try {
-        showLoading();
+        console.log('=== LOGIN START ===');
+        console.log('Username:', username);
+        
+        // Show loading if function exists
+        if (typeof showLoading === 'function') {
+            showLoading();
+        }
+        
+        console.log('Calling authAPI.login...');
         const response = await authAPI.login(username, password);
+        
+        // Debug: Log full response
+        console.log('=== LOGIN RESPONSE ===');
+        console.log('Full response:', JSON.stringify(response, null, 2));
+        console.log('Response type:', typeof response);
+        console.log('Has access_token?', !!response?.access_token);
+        console.log('Has user?', !!response?.user);
+        console.log('Access token:', response?.access_token ? response.access_token.substring(0, 30) + '...' : 'null');
+        
+        // Check if response is valid
+        if (!response || !response.access_token) {
+            console.error('ERROR: Invalid response from login API');
+            console.error('Response:', response);
+            if (typeof showToast === 'function') {
+                showToast('Lỗi: Phản hồi từ server không hợp lệ. Vui lòng thử lại.', 'error');
+            }
+            return false;
+        }
+        
+        // Save token
+        console.log('Saving token to localStorage...');
         setToken(response.access_token);
-        window.currentUser = response.user;
-        showToast('Đăng nhập thành công', 'success');
+        
+        // Verify token was saved
+        const savedToken = getToken();
+        console.log('Token saved check:', savedToken ? savedToken.substring(0, 30) + '...' : 'null');
+        
+        if (!savedToken) {
+            console.error('ERROR: Token was not saved to localStorage!');
+            if (typeof showToast === 'function') {
+                showToast('Lỗi: Không thể lưu token. Vui lòng thử lại.', 'error');
+            }
+            return false;
+        }
+        
+        window.currentUser = response.user || null;
+        console.log('Current user set:', window.currentUser);
+        
+        // Show success message
+        if (typeof showToast === 'function') {
+            showToast('Đăng nhập thành công', 'success');
+        } else {
+            console.warn('showToast function not available');
+        }
         
         // Check user roles and redirect using router
-        const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
+        // Extract roles from response - handle both array of objects and array of strings
+        let userRoles = [];
+        console.log('=== EXTRACTING ROLES ===');
+        console.log('response.user:', response.user);
+        console.log('response.user?.roles:', response.user?.roles);
         
-        // Sử dụng router để điều hướng
-        if (typeof router !== 'undefined' && router.onLoginSuccess) {
-            router.onLoginSuccess(userRoles);
+        if (response.user?.roles && Array.isArray(response.user.roles)) {
+            console.log('Extracting roles from response.user.roles');
+            userRoles = response.user.roles.map(r => {
+                // Handle both {name: "admin"} and "admin" formats
+                let roleStr = '';
+                if (typeof r === 'string') {
+                    roleStr = r;
+                } else if (r && typeof r === 'object' && r.name) {
+                    roleStr = r.name;
+                } else {
+                    roleStr = String(r);
+                }
+                // Normalize to lowercase and trim
+                const normalized = roleStr.toLowerCase().trim();
+                console.log('Role:', r, '-> normalized:', normalized);
+                return normalized;
+            });
         } else {
-            // Fallback nếu router chưa load
-            if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
-                window.location.href = 'admin.html#dashboard';
+            // Fallback to JWT token roles (already normalized in getUserRoles)
+            console.log('No roles in response.user, trying to get from JWT token');
+            if (typeof getUserRoles === 'function') {
+                userRoles = getUserRoles();
+                console.log('Roles from JWT:', userRoles);
             } else {
-                window.location.href = 'user.html#home';
+                console.error('getUserRoles function not available!');
             }
         }
         
+        console.log('=== FINAL ROLES ===');
+        console.log('User roles after login:', userRoles);
+        console.log('User roles type:', typeof userRoles, Array.isArray(userRoles));
+        
+        // Verify token is saved before redirect
+        const tokenCheck = getToken();
+        if (!tokenCheck) {
+            console.error('ERROR: Token not found after setToken!');
+            showToast('Lỗi: Token không được lưu. Vui lòng đăng nhập lại.', 'error');
+            return false;
+        }
+        
+        // Check if admin using helper function (consistent check)
+        console.log('=== CHECKING ADMIN STATUS ===');
+        const isAdmin = typeof checkIsAdmin !== 'undefined' 
+            ? checkIsAdmin(userRoles) 
+            : (Array.isArray(userRoles) && userRoles.some(role => ['admin', 'manager', 'receptionist'].includes(role.toLowerCase().trim())));
+        console.log('Auth.js: Is admin?', isAdmin, 'roles:', userRoles);
+        console.log('checkIsAdmin function available?', typeof checkIsAdmin !== 'undefined');
+        
+        // Retry mechanism to ensure router is ready
+        let retryCount = 0;
+        const maxRetries = 10; // Tăng số lần retry
+        
+        const attemptRedirect = () => {
+            retryCount++;
+            console.log(`=== REDIRECT ATTEMPT ${retryCount}/${maxRetries} ===`);
+            console.log('window.router available?', typeof window.router !== 'undefined');
+            console.log('window.router.onLoginSuccess available?', typeof window.router !== 'undefined' && typeof window.router.onLoginSuccess === 'function');
+            
+            // Sử dụng router để điều hướng
+            if (typeof window.router !== 'undefined' && typeof window.router.onLoginSuccess === 'function') {
+                console.log('✅ Auth.js: Using router.onLoginSuccess');
+                try {
+                    window.router.onLoginSuccess(userRoles);
+                    console.log('✅ Router.onLoginSuccess called successfully');
+                } catch (error) {
+                    console.error('❌ Error calling router.onLoginSuccess:', error);
+                    // Fallback to direct redirect
+                    if (isAdmin) {
+                        console.log('Auth.js: Fallback - Admin → redirect đến admin/admin.html#dashboard');
+                        window.location.href = '/admin/admin.html#dashboard';
+                    } else {
+                        console.log('Auth.js: Fallback - User → redirect đến user/user.html#home');
+                        window.location.href = '/user/user.html#home';
+                    }
+                }
+            } else if (retryCount < maxRetries) {
+                // Router chưa sẵn sàng, retry sau 100ms
+                console.log(`⏳ Auth.js: Router not ready (attempt ${retryCount}/${maxRetries}), retrying in 100ms...`);
+                setTimeout(attemptRedirect, 100);
+            } else {
+                // Fallback nếu router không load sau nhiều lần retry
+                console.log('⚠️ Auth.js: Router not available after retries, using fallback redirect');
+                if (isAdmin) {
+                    console.log('Auth.js: Admin → redirect đến /admin/admin.html#dashboard');
+                    window.location.href = '/admin/admin.html#dashboard';
+                } else {
+                    console.log('Auth.js: User → redirect đến /user/user.html#home');
+                    window.location.href = '/user/user.html#home';
+                }
+            }
+        };
+        
+        // Start redirect attempt after small delay
+        console.log('Starting redirect attempt in 100ms...');
+        setTimeout(attemptRedirect, 100);
+        
+        console.log('=== LOGIN SUCCESS ===');
         return true;
     } catch (error) {
-        showError('loginError', error.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.');
-        showToast(error.message || 'Đăng nhập thất bại', 'error');
+        console.error('=== LOGIN ERROR ===');
+        console.error('Error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        
+        // Show error message
+        const errorMessage = error.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.';
+        console.error('Error message to show:', errorMessage);
+        
+        // Try to show error in loginMessage element if it exists
+        // const loginMessageEl = document.getElementById('loginMessage');
+        // if (loginMessageEl) {
+        //     loginMessageEl.textContent = errorMessage;
+        //     loginMessageEl.style.display = 'block';
+        //     loginMessageEl.style.color = '#e74c3c';
+        //     setTimeout(() => {
+        //         loginMessageEl.style.display = 'none';
+        //     }, 5000);
+        // }
+        
+        // Show toast if available
+        if (typeof showToast === 'function') {
+            showToast(errorMessage, 'error');
+        } else {
+            alert(errorMessage); // Fallback to alert
+        }
+        
         return false;
     } finally {
-        hideLoading();
+        // Hide loading if function exists
+        if (typeof hideLoading === 'function') {
+            hideLoading();
+        }
+        console.log('=== LOGIN FINALLY ===');
     }
 }
 
@@ -136,7 +312,19 @@ async function register(userData) {
         showToast('Đăng ký thành công', 'success');
         
         // Check user roles and redirect using router
-        const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
+        // Extract roles from response - handle both array of objects and array of strings
+        let userRoles = [];
+        if (response.user?.roles) {
+            userRoles = response.user.roles.map(r => {
+                // Handle both {name: "admin"} and "admin" formats
+                return typeof r === 'string' ? r : r.name;
+            });
+        } else {
+            // Fallback to JWT token roles
+            userRoles = getUserRoles();
+        }
+        
+        console.log('User roles after register:', userRoles);
         
         // Sử dụng router để điều hướng
         if (typeof router !== 'undefined' && router.onRegisterSuccess) {
@@ -187,15 +375,71 @@ function showError(elementId, message) {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    // Login form (for index.html)
+    // Login form (for login.html - uses email field)
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const username = document.getElementById('loginUsername').value;
-            const password = document.getElementById('loginPassword').value;
+            console.log('Login form submitted');
+            
+            // Check if this is login.html (has email field) or index.html (has loginUsername field)
+            const emailInput = document.getElementById('email');
+            const usernameInput = document.getElementById('loginUsername');
+            const passwordInput = document.getElementById('password') || document.getElementById('loginPassword');
+            
+            console.log('Input elements:', {
+                emailInput: emailInput ? 'found' : 'not found',
+                usernameInput: usernameInput ? 'found' : 'not found',
+                passwordInput: passwordInput ? 'found' : 'not found'
+            });
+            
+            // Get username/email - prioritize email field (for login.html)
+            let username = '';
+            if (emailInput) {
+                username = emailInput.value || '';
+                console.log('Using email field, value:', username);
+            } else if (usernameInput) {
+                username = usernameInput.value || '';
+                console.log('Using username field, value:', username);
+            } else {
+                console.error('Neither email nor username input found!');
+                if (typeof showToast === 'function') {
+                    showToast('Lỗi: Không tìm thấy trường nhập liệu', 'error');
+                } else {
+                    alert('Lỗi: Không tìm thấy trường nhập liệu');
+                }
+                return;
+            }
+            
+            // Get password
+            const password = passwordInput ? (passwordInput.value || '') : '';
+            console.log('Password value:', password ? '***' : 'empty');
+            
+            if (!username || !password) {
+                const errorMsg = 'Vui lòng nhập đầy đủ thông tin';
+                console.error('Validation failed:', { username: !!username, password: !!password });
+                
+                // Show error in loginMessage element if it exists
+                const loginMessageEl = document.getElementById('loginMessage');
+                if (loginMessageEl) {
+                    loginMessageEl.textContent = errorMsg;
+                    loginMessageEl.style.display = 'block';
+                    loginMessageEl.style.color = '#e74c3c';
+                }
+                
+                if (typeof showToast === 'function') {
+                    showToast(errorMsg, 'error');
+                } else {
+                    alert(errorMsg);
+                }
+                return;
+            }
+            
+            console.log('Calling login function with username:', username);
             await login(username, password);
         });
+    } else {
+        console.warn('Login form not found (id="loginForm")');
     }
     
     // Register form (for index.html)

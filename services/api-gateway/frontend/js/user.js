@@ -18,13 +18,31 @@ async function checkUserAuth() {
     const token = getToken();
     if (token) {
         try {
+            console.log('[checkUserAuth] Token found, calling authAPI.getMe()...');
             window.currentUser = await authAPI.getMe();
+            console.log('[checkUserAuth] User info loaded successfully:', window.currentUser);
             showAuthenticatedUI();
         } catch (error) {
-            console.error('Failed to load user info:', error);
-            removeToken();
+            console.error('[checkUserAuth] Failed to load user info:', error);
+            console.error('[checkUserAuth] Error status:', error.status);
+            console.error('[checkUserAuth] Error message:', error.message);
+            
+            // Only remove token if it's a real authentication error (401/403)
+            // Don't logout on network errors or other issues
+            if (error.status === 401 || error.status === 403) {
+                console.warn('[checkUserAuth] Authentication failed, removing token');
+                removeToken();
+                showUnauthenticatedUI();
+            } else {
+                // For other errors, keep token and show error message
+                console.warn('[checkUserAuth] Non-auth error, keeping token');
+                if (typeof showToast === 'function') {
+                    showToast('Không thể tải thông tin người dùng. Vui lòng thử lại.', 'warning');
+                }
+            }
         }
     } else {
+        console.log('[checkUserAuth] No token found');
         showUnauthenticatedUI();
     }
 }
@@ -82,25 +100,108 @@ function setupEventListeners() {
             try {
                 showLoading();
                 const response = await authAPI.login(username, password);
+                
+                // Debug: Log token before saving
+                console.log('Login response:', response);
+                console.log('Access token received:', response.access_token ? response.access_token.substring(0, 30) + '...' : 'null');
+                
+                // Save token
                 setToken(response.access_token);
+                
+                // Verify token was saved
+                const savedToken = getToken();
+                console.log('[Login] Token saved to localStorage:', savedToken ? savedToken.substring(0, 30) + '...' : 'null');
+                
+                if (!savedToken) {
+                    console.error('[Login] ERROR: Token was not saved to localStorage!');
+                    showToast('Lỗi: Không thể lưu token. Vui lòng thử lại.', 'error');
+                    return;
+                }
+                
+                // Set user info from response (don't need to call getMe immediately)
+                if (response.user) {
+                    window.currentUser = response.user;
+                    console.log('[Login] User info set from response:', window.currentUser);
+                }
+                
                 showToast('Đăng nhập thành công', 'success');
                 closeLoginModal();
-                checkUserAuth();
+                
+                // Small delay before checking auth to ensure token is saved
+                setTimeout(() => {
+                    checkUserAuth();
+                }, 100);
                 
                 // Check if admin, redirect to admin page
-                const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
-                
-                // Sử dụng router để điều hướng
-                if (typeof router !== 'undefined' && router.onLoginSuccess) {
-                    router.onLoginSuccess(userRoles);
+                // Extract roles from response - handle both array of objects and array of strings
+                let userRoles = [];
+                if (response.user?.roles) {
+                    userRoles = response.user.roles.map(r => {
+                        // Handle both {name: "admin"} and "admin" formats
+                        let roleStr = '';
+                        if (typeof r === 'string') {
+                            roleStr = r;
+                        } else if (r && typeof r === 'object' && r.name) {
+                            roleStr = r.name;
+                        } else {
+                            roleStr = String(r);
+                        }
+                        // Normalize to lowercase and trim
+                        return roleStr.toLowerCase().trim();
+                    });
                 } else {
-                    // Fallback
-                    if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
-                        window.location.href = 'admin.html#dashboard';
-                    } else {
-                        window.location.href = 'user.html#home';
-                    }
+                    // Fallback to JWT token roles (already normalized in getUserRoles)
+                    userRoles = getUserRoles();
                 }
+                
+                console.log('User.js: User roles after login:', userRoles);
+                console.log('User.js: User roles type:', typeof userRoles, Array.isArray(userRoles));
+                
+                // Verify token is saved before redirect
+                const tokenCheck = getToken();
+                if (!tokenCheck) {
+                    console.error('ERROR: Token not found after setToken!');
+                    showToast('Lỗi: Token không được lưu. Vui lòng đăng nhập lại.', 'error');
+                    return;
+                }
+                
+                // Check if admin using helper function (consistent check)
+                const isAdmin = typeof checkIsAdmin !== 'undefined' 
+                    ? checkIsAdmin(userRoles) 
+                    : userRoles.some(role => ['admin', 'manager', 'receptionist'].includes(role.toLowerCase().trim()));
+                console.log('User.js: Is admin?', isAdmin, 'roles:', userRoles);
+                
+                // Retry mechanism to ensure router is ready
+                let retryCount = 0;
+                const maxRetries = 5;
+                
+                const attemptRedirect = () => {
+                    retryCount++;
+                    console.log(`User.js: Redirect attempt ${retryCount}/${maxRetries}`);
+                    
+                    // Sử dụng router để điều hướng khi login thành công
+                    if (typeof window.router !== 'undefined' && window.router.onLoginSuccess) {
+                        console.log('User.js: Using router.onLoginSuccess');
+                        window.router.onLoginSuccess(userRoles);
+                    } else if (retryCount < maxRetries) {
+                        // Router chưa sẵn sàng, retry sau 100ms
+                        console.log('User.js: Router not ready, retrying...');
+                        setTimeout(attemptRedirect, 100);
+                    } else {
+                        // Fallback nếu router không load sau nhiều lần retry
+                        console.log('User.js: Router not available after retries, using fallback redirect');
+                        if (isAdmin) {
+                            console.log('User.js: Admin → redirect đến admin/admin.html#dashboard');
+                            window.location.href = 'admin/admin.html#dashboard';
+                        } else {
+                            console.log('User.js: User → redirect đến user/user.html#home');
+                            window.location.href = 'user/user.html#home';
+                        }
+                    }
+                };
+                
+                // Start redirect attempt after small delay
+                setTimeout(attemptRedirect, 100);
             } catch (error) {
                 console.error('Login error:', error);
                 let errorMsg = error.message || 'Đăng nhập thất bại';
@@ -159,7 +260,19 @@ function setupEventListeners() {
                 checkUserAuth();
                 
                 // Check user roles and redirect using router
-                const userRoles = response.user?.roles?.map(r => r.name) || getUserRoles();
+                // Extract roles from response - handle both array of objects and array of strings
+                let userRoles = [];
+                if (response.user?.roles) {
+                    userRoles = response.user.roles.map(r => {
+                        // Handle both {name: "admin"} and "admin" formats
+                        return typeof r === 'string' ? r : r.name;
+                    });
+                } else {
+                    // Fallback to JWT token roles
+                    userRoles = getUserRoles();
+                }
+                
+                console.log('User roles after register:', userRoles);
                 
                 // Sử dụng router để điều hướng
                 if (typeof router !== 'undefined' && router.onRegisterSuccess) {
@@ -167,9 +280,9 @@ function setupEventListeners() {
                 } else {
                     // Fallback
                     if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
-                        window.location.href = 'admin.html#dashboard';
+                        window.location.href = 'admin/admin.html#dashboard';
                     } else {
-                        window.location.href = 'user.html#home';
+                        window.location.href = 'user/user.html#home';
                     }
                 }
             } catch (error) {
@@ -336,34 +449,173 @@ async function loadMyBookings() {
     
     try {
         showLoading();
-        const bookings = await bookingAPI.getAll();
-        // Filter bookings for current user (in real app, API should filter by user)
+        
+        // Get or create customer to get customer_id
+        const customer = await getOrCreateCustomer();
+        
+        // Get bookings for this customer
+        const bookings = await bookingAPI.getAll({ customer_id: customer.id });
         
         const list = document.getElementById('myBookingsList');
-        if (bookings.length === 0) {
-            list.innerHTML = '<div class="empty-state">You have no bookings yet</div>';
+        if (!list) {
+            console.error('myBookingsList element not found');
             return;
         }
         
-        list.innerHTML = bookings.map(booking => `
-            <div class="booking-card">
-                <div class="booking-info">
-                    <div class="booking-title">Booking #${booking.id}</div>
-                    <div class="booking-details">
-                        Room #${booking.room_id} • ${formatDate(booking.check_in)} - ${formatDate(booking.check_out)} • 
-                        ${booking.guests} guests
+        if (bookings.length === 0) {
+            list.innerHTML = '<div class="empty-state">Bạn chưa có đặt phòng nào</div>';
+            return;
+        }
+        
+        // Get room info for each booking
+        const bookingsWithRoomInfo = await Promise.all(bookings.map(async (booking) => {
+            try {
+                const room = await roomAPI.getRoomById(booking.room_id);
+                return { ...booking, room };
+            } catch (error) {
+                console.error(`Failed to load room ${booking.room_id}:`, error);
+                return { ...booking, room: null };
+            }
+        }));
+        
+        list.innerHTML = bookingsWithRoomInfo.map(booking => {
+            const roomInfo = booking.room ? `Phòng ${booking.room.room_number || booking.room_id}` : `Phòng #${booking.room_id}`;
+            const nights = Math.ceil((new Date(booking.check_out) - new Date(booking.check_in)) / (1000 * 60 * 60 * 24));
+            
+            return `
+                <div class="booking-card">
+                    <div class="booking-info">
+                        <div class="booking-title">Đặt phòng #${booking.id}</div>
+                        <div class="booking-details">
+                            <i class="fas fa-bed"></i> ${roomInfo}<br>
+                            <i class="fas fa-calendar"></i> ${formatDate(booking.check_in)} - ${formatDate(booking.check_out)}<br>
+                            <i class="fas fa-users"></i> ${booking.guests} khách • ${nights} đêm<br>
+                            <i class="fas fa-dollar-sign"></i> ${formatCurrency(booking.total_amount || 0)}
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
+                        ${getStatusBadge(booking.status)}
+                        ${booking.status === 'confirmed' ? `
+                            <button class="btn btn-sm btn-secondary" onclick="cancelBooking(${booking.id})">
+                                <i class="fas fa-times"></i> Hủy
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
-                <div>
-                    ${getStatusBadge(booking.status)}
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     } catch (error) {
         console.error('Failed to load bookings:', error);
-        showToast('Không thể tải bookings', 'error');
+        showToast(error.message || 'Không thể tải danh sách đặt phòng', 'error');
+        const list = document.getElementById('myBookingsList');
+        if (list) {
+            list.innerHTML = '<div class="empty-state">Lỗi khi tải danh sách đặt phòng</div>';
+        }
     } finally {
         hideLoading();
+    }
+}
+
+// Cancel booking
+async function cancelBooking(bookingId) {
+    if (!await confirmAction('Bạn có chắc chắn muốn hủy đặt phòng này?', 'Hủy đặt phòng')) {
+        return;
+    }
+    
+    try {
+        showLoading();
+        await bookingAPI.cancel(bookingId);
+        showToast('Đã hủy đặt phòng thành công', 'success');
+        loadMyBookings();
+    } catch (error) {
+        console.error('Failed to cancel booking:', error);
+        showToast(error.message || 'Không thể hủy đặt phòng', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Get or create customer from current user
+async function getOrCreateCustomer() {
+    if (!getToken()) {
+        throw new Error('Vui lòng đăng nhập trước');
+    }
+    
+    if (!window.currentUser) {
+        // Load user info if not available
+        try {
+            window.currentUser = await authAPI.getMe();
+        } catch (error) {
+            console.error('Failed to load user info:', error);
+            throw new Error('Không thể tải thông tin người dùng');
+        }
+    }
+    
+    if (!window.currentUser) {
+        throw new Error('Thông tin người dùng không khả dụng');
+    }
+    
+    const userEmail = window.currentUser.email;
+    const userName = window.currentUser.full_name || window.currentUser.username;
+    
+    try {
+        // Try to find customer by email
+        // Note: customerAPI.getAll() might require search parameter
+        let customers = [];
+        try {
+            customers = await customerAPI.getAll();
+        } catch (error) {
+            // If getAll fails, try with search parameter
+            console.warn('getAll failed, trying with search:', error);
+            try {
+                customers = await customerAPI.getAll({ search: userEmail });
+            } catch (e) {
+                console.error('Failed to get customers:', e);
+            }
+        }
+        
+        // Search for existing customer by email
+        const existingCustomer = Array.isArray(customers) 
+            ? customers.find(c => c.email && c.email.toLowerCase() === userEmail.toLowerCase())
+            : null;
+        
+        if (existingCustomer) {
+            console.log('Found existing customer:', existingCustomer);
+            return existingCustomer;
+        }
+        
+        // Create new customer if not exists
+        console.log('Creating new customer for:', userEmail);
+        const customerData = {
+            name: userName,
+            email: userEmail,
+            phone: '0000000000', // Default phone, user can update later
+            address: ''
+        };
+        
+        const newCustomer = await customerAPI.create(customerData);
+        console.log('Created new customer:', newCustomer);
+        return newCustomer;
+    } catch (error) {
+        console.error('Error getting/creating customer:', error);
+        
+        // If create fails because customer exists, try to find again
+        if (error.message && error.message.includes('already exists')) {
+            try {
+                const customers = await customerAPI.getAll();
+                const found = Array.isArray(customers) 
+                    ? customers.find(c => c.email && c.email.toLowerCase() === userEmail.toLowerCase())
+                    : null;
+                if (found) {
+                    console.log('Found customer after create error:', found);
+                    return found;
+                }
+            } catch (e) {
+                console.error('Failed to search customers after create error:', e);
+            }
+        }
+        
+        throw new Error('Không thể lấy thông tin khách hàng. Vui lòng thử lại.');
     }
 }
 
@@ -376,85 +628,214 @@ async function bookRoomType(roomTypeId) {
     }
     
     try {
+        showLoading();
+        
+        // Get room type info
+        const roomTypes = await roomAPI.getRoomTypes();
+        const roomType = roomTypes.find(t => t.id === roomTypeId);
+        
+        if (!roomType) {
+            showToast('Không tìm thấy loại phòng', 'error');
+            return;
+        }
+        
         // Get available rooms for this type
         const rooms = await roomAPI.getRooms({ room_type_id: roomTypeId, status: 'available' });
-        const roomType = await roomAPI.getRoomTypes().then(types => types.find(t => t.id === roomTypeId));
         
         if (rooms.length === 0) {
             showToast('Không còn phòng trống cho loại này', 'warning');
             return;
         }
         
-        // Show booking modal
-        const checkIn = document.getElementById('searchCheckIn')?.value || '';
-        const checkOut = document.getElementById('searchCheckOut')?.value || '';
-        const guests = parseInt(document.getElementById('searchGuests')?.value || roomType.max_occupancy);
+        // Get dates from search form or use defaults
+        const today = new Date().toISOString().split('T')[0];
+        const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         
-        showBookingModalForUser(roomTypeId, rooms[0].id, checkIn, checkOut, guests);
+        const checkIn = document.getElementById('searchCheckIn')?.value || today;
+        const checkOut = document.getElementById('searchCheckOut')?.value || tomorrow;
+        const guests = parseInt(document.getElementById('searchGuests')?.value || roomType.max_occupancy || 2);
+        
+        // Validate guests
+        const maxGuests = roomType.max_occupancy || 4;
+        const finalGuests = Math.min(Math.max(guests, 1), maxGuests);
+        
+        showBookingModalForUser(roomTypeId, rooms[0].id, roomType, checkIn, checkOut, finalGuests);
     } catch (error) {
-        showToast('Không thể tải thông tin phòng', 'error');
+        console.error('Error in bookRoomType:', error);
+        showToast(error.message || 'Không thể tải thông tin phòng', 'error');
+    } finally {
+        hideLoading();
     }
 }
 
 // Show booking modal for user
-function showBookingModalForUser(roomTypeId, roomId, checkIn, checkOut, guests) {
+function showBookingModalForUser(roomTypeId, roomId, roomType, checkIn, checkOut, guests) {
     const modal = document.getElementById('bookingModal');
     const body = document.getElementById('bookingModalBody');
     
+    // Calculate nights and total price
+    const checkInDate = new Date(checkIn);
+    const checkOutDate = new Date(checkOut);
+    const nights = Math.max(1, Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24)));
+    const pricePerNight = roomType.price_per_night || 0;
+    const totalPrice = nights * pricePerNight;
+    
     body.innerHTML = `
-        <h2><i class="fas fa-calendar-check"></i> Book Room</h2>
+        <h2><i class="fas fa-calendar-check"></i> Đặt Phòng</h2>
+        <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f0f9ff; border-radius: 8px;">
+            <h3 style="margin: 0 0 0.5rem 0; color: #2563eb;">${roomType.name}</h3>
+            <p style="margin: 0.25rem 0; color: #64748b;">
+                <i class="fas fa-users"></i> Tối đa ${roomType.max_occupancy} khách
+            </p>
+            <p style="margin: 0.25rem 0; color: #64748b;">
+                <i class="fas fa-dollar-sign"></i> ${formatCurrency(pricePerNight)} / đêm
+            </p>
+        </div>
         <form id="userBookingForm">
             <div class="form-group">
-                <label>Check-in Date *</label>
+                <label>Ngày Check-in *</label>
                 <input type="date" id="userBookingCheckIn" class="form-control" 
-                    value="${checkIn}" required>
+                    value="${checkIn}" required min="${new Date().toISOString().split('T')[0]}">
             </div>
             <div class="form-group">
-                <label>Check-out Date *</label>
+                <label>Ngày Check-out *</label>
                 <input type="date" id="userBookingCheckOut" class="form-control" 
-                    value="${checkOut}" required>
+                    value="${checkOut}" required min="${checkIn}">
             </div>
             <div class="form-group">
-                <label>Number of Guests *</label>
+                <label>Số lượng khách *</label>
                 <input type="number" id="userBookingGuests" class="form-control" 
-                    value="${guests}" required min="1">
+                    value="${guests}" required min="1" max="${roomType.max_occupancy}">
+                <small style="color: #64748b;">Tối đa ${roomType.max_occupancy} khách</small>
             </div>
             <div class="form-group">
-                <label>Special Requests</label>
-                <textarea id="userBookingRequests" class="form-control" rows="3"></textarea>
+                <label>Yêu cầu đặc biệt</label>
+                <textarea id="userBookingRequests" class="form-control" rows="3" 
+                    placeholder="Nhập yêu cầu đặc biệt (nếu có)..."></textarea>
+            </div>
+            <div style="padding: 1rem; background: #f8fafc; border-radius: 8px; margin-bottom: 1rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span>Số đêm:</span>
+                    <strong id="bookingNights">${nights}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span>Giá / đêm:</span>
+                    <strong>${formatCurrency(pricePerNight)}</strong>
+                </div>
+                <hr style="margin: 0.5rem 0;">
+                <div style="display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold; color: #2563eb;">
+                    <span>Tổng tiền:</span>
+                    <strong id="bookingTotal">${formatCurrency(totalPrice)}</strong>
+                </div>
             </div>
             <div class="form-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeBookingModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary">Confirm Booking</button>
+                <button type="button" class="btn btn-secondary" onclick="closeBookingModal()">Hủy</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Xác nhận đặt phòng
+                </button>
             </div>
         </form>
     `;
     
     modal.style.display = 'flex';
     
+    // Add event listeners for date changes to recalculate price
+    const checkInInput = document.getElementById('userBookingCheckIn');
+    const checkOutInput = document.getElementById('userBookingCheckOut');
+    const guestsInput = document.getElementById('userBookingGuests');
+    
+    const updatePrice = () => {
+        const newCheckIn = new Date(checkInInput.value);
+        const newCheckOut = new Date(checkOutInput.value);
+        if (newCheckOut > newCheckIn) {
+            const newNights = Math.ceil((newCheckOut - newCheckIn) / (1000 * 60 * 60 * 24));
+            const newTotal = newNights * pricePerNight;
+            document.getElementById('bookingNights').textContent = newNights;
+            document.getElementById('bookingTotal').textContent = formatCurrency(newTotal);
+        }
+    };
+    
+    checkInInput.addEventListener('change', () => {
+        checkOutInput.min = checkInInput.value;
+        if (checkOutInput.value < checkInInput.value) {
+            const nextDay = new Date(checkInInput.value);
+            nextDay.setDate(nextDay.getDate() + 1);
+            checkOutInput.value = nextDay.toISOString().split('T')[0];
+        }
+        updatePrice();
+    });
+    
+    checkOutInput.addEventListener('change', updatePrice);
+    
+    // Handle form submission
     document.getElementById('userBookingForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        // Get customer ID (in real app, from current user)
-        const customerId = window.currentUser?.id || 1;
+        const checkInValue = checkInInput.value;
+        const checkOutValue = checkOutInput.value;
+        const guestsValue = parseInt(guestsInput.value);
         
-        const bookingData = {
-            customer_id: customerId,
-            room_id: roomId,
-            check_in: document.getElementById('userBookingCheckIn').value,
-            check_out: document.getElementById('userBookingCheckOut').value,
-            guests: parseInt(document.getElementById('userBookingGuests').value),
-            special_requests: document.getElementById('userBookingRequests').value || null
-        };
+        // Validation
+        if (!checkInValue || !checkOutValue) {
+            showToast('Vui lòng chọn ngày check-in và check-out', 'warning');
+            return;
+        }
+        
+        const checkInDate = new Date(checkInValue);
+        const checkOutDate = new Date(checkOutValue);
+        
+        if (checkOutDate <= checkInDate) {
+            showToast('Ngày check-out phải sau ngày check-in', 'warning');
+            return;
+        }
+        
+        if (guestsValue < 1 || guestsValue > roomType.max_occupancy) {
+            showToast(`Số lượng khách phải từ 1 đến ${roomType.max_occupancy}`, 'warning');
+            return;
+        }
         
         try {
             showLoading();
-            await bookingAPI.create(bookingData);
-            showToast('Đặt phòng thành công', 'success');
+            
+            // Get or create customer
+            const customer = await getOrCreateCustomer();
+            
+            const bookingData = {
+                customer_id: customer.id,
+                room_id: roomId,
+                check_in: checkInValue,
+                check_out: checkOutValue,
+                guests: guestsValue,
+                special_requests: document.getElementById('userBookingRequests').value || null
+            };
+            
+            console.log('Creating booking:', bookingData);
+            
+            const booking = await bookingAPI.create(bookingData);
+            showToast('Đặt phòng thành công!', 'success');
             closeBookingModal();
-            loadMyBookings();
+            
+            // Reload bookings if on myBookings page
+            if (document.getElementById('myBookingsPage')?.classList.contains('active')) {
+                loadMyBookings();
+            } else {
+                // Switch to myBookings page
+                showUserPage('myBookings');
+            }
         } catch (error) {
-            showToast(error.message || 'Không thể đặt phòng', 'error');
+            console.error('Booking error:', error);
+            let errorMsg = error.message || 'Không thể đặt phòng';
+            
+            // Translate common errors
+            if (errorMsg.includes('not available') || errorMsg.includes('Room is not available')) {
+                errorMsg = 'Phòng không còn trống trong khoảng thời gian này. Vui lòng chọn ngày khác.';
+            } else if (errorMsg.includes('Customer not found')) {
+                errorMsg = 'Không tìm thấy thông tin khách hàng. Vui lòng thử lại.';
+            } else if (errorMsg.includes('Room not found')) {
+                errorMsg = 'Không tìm thấy thông tin phòng. Vui lòng thử lại.';
+            }
+            
+            showToast(errorMsg, 'error');
         } finally {
             hideLoading();
         }
@@ -555,4 +936,6 @@ window.closeLoginModal = closeLoginModal;
 window.showRegisterModal = showRegisterModal;
 window.closeRegisterModal = closeRegisterModal;
 window.closeBookingModal = closeBookingModal;
+window.cancelBooking = cancelBooking;
+window.getOrCreateCustomer = getOrCreateCustomer;
 

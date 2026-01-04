@@ -58,12 +58,14 @@ async def create_payment(
     db: Session = Depends(get_db)
 ):
     """
-    Create a new payment for room booking
+    Create a new payment for room booking (Thanh toán)
     
     - **booking_id**: Booking ID
     - **amount**: Payment amount
     - **payment_method**: Payment method (cash, card, bank_transfer)
     - **payment_status**: Payment status (pending, paid, failed)
+    
+    Note: Regular users can only create payments for their own bookings. Admins can create payments for any booking.
     """
     # Get token for inter-service calls
     token = await get_token(request)
@@ -82,6 +84,20 @@ async def create_payment(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot process payment for cancelled booking"
             )
+        
+        # Check if user is admin
+        user_roles = current_user.get("roles", [])
+        is_admin = "admin" in user_roles or "manager" in user_roles or "receptionist" in user_roles
+        
+        # If not admin, verify booking belongs to user
+        if not is_admin:
+            user_id = int(current_user.get("sub"))  # Convert string to int
+            # Assume customer_id matches user_id (may need adjustment based on your schema)
+            if booking.get("customer_id") != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only create payments for your own bookings"
+                )
     except HTTPException:
         raise
     except Exception:
@@ -153,6 +169,7 @@ async def get_payments(
     booking_id: Optional[int] = None,
     payment_status: Optional[str] = None,
     payment_method: Optional[str] = None,
+    request: Request = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -162,8 +179,35 @@ async def get_payments(
     - **booking_id**: Filter by booking ID
     - **payment_status**: Filter by status (pending, paid, failed, refunded)
     - **payment_method**: Filter by payment method
+    
+    Note: Regular users can only see payments for their own bookings. Admins can see all payments.
     """
     query = db.query(Payment)
+    
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    is_admin = "admin" in user_roles or "manager" in user_roles or "receptionist" in user_roles
+    
+    # If not admin, filter by user's bookings
+    if not is_admin:
+        user_id = int(current_user.get("sub"))  # Convert string to int
+        token = await get_token(request) if request else current_user.get("token", "")
+        auth_header = {"Authorization": f"Bearer {token}"} if token else {}
+        
+        try:
+            # Get bookings for this user
+            bookings = await call_service(
+                BOOKING_SERVICE_URL,
+                f"bookings?customer_id={user_id}",
+                headers=auth_header
+            )
+            booking_ids = [b['id'] for b in bookings]
+            if not booking_ids:
+                return []  # No bookings, no payments
+            query = query.filter(Payment.booking_id.in_(booking_ids))
+        except Exception as e:
+            # If can't get bookings, return empty list for security
+            return []
     
     if booking_id:
         query = query.filter(Payment.booking_id == booking_id)
@@ -179,16 +223,52 @@ async def get_payments(
 @app.get("/payments/{payment_id}", response_model=PaymentWithInvoice)
 async def get_payment(
     payment_id: int,
+    request: Request = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get payment by ID with invoice"""
+    """
+    Get payment by ID with invoice (Xem hóa đơn)
+    
+    Note: Regular users can only see payments for their own bookings. Admins can see all payments.
+    """
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found"
         )
+    
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    is_admin = "admin" in user_roles or "manager" in user_roles or "receptionist" in user_roles
+    
+    # If not admin, verify payment belongs to user's booking
+    if not is_admin:
+        user_id = int(current_user.get("sub"))  # Convert string to int
+        token = await get_token(request) if request else current_user.get("token", "")
+        auth_header = {"Authorization": f"Bearer {token}"} if token else {}
+        
+        try:
+            # Get booking to check customer_id
+            booking = await call_service(
+                BOOKING_SERVICE_URL,
+                f"bookings/{payment.booking_id}",
+                headers=auth_header
+            )
+            # Assume customer_id matches user_id (may need adjustment based on your schema)
+            if booking.get("customer_id") != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only view payments for your own bookings"
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot verify payment ownership"
+            )
     
     payment_response = PaymentResponse.model_validate(payment)
     invoice = db.query(Invoice).filter(Invoice.payment_id == payment_id).first()

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Customer Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"/>
+    <link rel="stylesheet" href="/css/admin.css" />
+    <script src="/js/customers.js" defer></script>
+</head>
+<body>
+    <div id="adminLayout"></div>
+
+    <main class="main">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 class="title" style="margin:0;">Customer Management</h2>
+            <button onclick="openModal()" class="btn-save" style="width:auto; margin:0; padding:10px 25px;">
+                <i class="fa-solid fa-user-plus"></i> Add Customer
+            </button>
+        </div>
+
+        <div class="filter-bar">
+            <input type="text" id="searchKeyword" class="filter-input" placeholder="Search..." style="flex: 2;">
+            
+            <select id="filterTag" class="filter-input">
+                <option value="">All Tags</option>
+                <option value="VIP">VIP</option>
+                <option value="NEW">New</option>
+                <option value="RETURNING">Returning</option>
+                <option value="WARNED">Warned</option>
+            </select>
+
+            <select id="filterStatus" class="filter-input">
+                <option value="">All Status</option>
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+            </select>
+
+            <button onclick="renderTable()" class="btn-save" style="width:auto; margin:0; padding:8px 20px; background:#4b7bec;">
+                <i class="fa-solid fa-search"></i>
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th width="50">ID</th>
+                        <th>User Info</th>
+                        <th>Phone</th>
+                        <th>Passport</th>
+                        <th>Nation</th>
+                        <th>Role</th>
+                        <th>Tags</th>
+                        <th>Status</th>
+                        <th width="90">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="custTableBody">
+                    <tr><td colspan="8" style="text-align:center">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <div id="custModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()" style="position:absolute; top:15px; right:20px; cursor:pointer; font-size:24px;">&times;</span>
+            <h2 id="modalTitle" style="margin-top:0; color:#333;">Customer Profile</h2>
+            
+            <form id="custForm">
+                <input type="hidden" id="custId">
+
+                <div class="section-header">Personal Info</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="fullName" required placeholder="John Doe">
+                    </div>
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <input type="email" id="email" required placeholder="john@example.com">
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Phone Number</label>
+                        <input type="text" id="phone" required placeholder="0901234567">
+                    </div>
+                    <div class="form-group">
+                        <label>Passport / CCCD</label>
+                        <input type="text" id="passport" placeholder="ID Number">
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Nationality</label>
+                        <input type="text" id="nationality" placeholder="Vietnam">
+                    </div>
+                    <div class="form-group">
+                        <label>Role</label>
+                        <select id="role">
+                            <option value="USER">User</option>
+                            <option value="ADMIN">Admin</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="section-header">Account Settings</div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="status">
+                            <option value="true" style="color:green; font-weight:bold;">Active</option>
+                            <option value="false" style="color:red; font-weight:bold;">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Tag Label</label>
+                        <select id="tags">
+                            <option value="">-- No Tag --</option>
+                            <option value="VIP">VIP</option>
+                            <option value="NEW">New</option>
+                            <option value="RETURNING">Returning</option>
+                            <option value="WARNED">Warned</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Internal Notes (Admin Only)</label>
+                    <textarea id="notes" rows="2" placeholder="Ghi chú nội bộ..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Password (Leave blank if not changing)</label>
+                    <input type="password" id="password" placeholder="******">
+                </div>
+
+                <button type="submit" class="btn-save">Save Profile</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

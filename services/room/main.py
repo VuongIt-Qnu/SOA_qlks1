@@ -13,6 +13,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 
 from database import get_db, Base, engine
 from shared.common.dependencies import get_current_user
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from shared.utils.jwt_handler import verify_token
+
+security = HTTPBearer(auto_error=False)  # auto_error=False allows requests without token
 from shared.utils.http_client import call_service
 from models import Room, RoomType
 from schemas import RoomCreate, RoomUpdate, RoomResponse, RoomTypeCreate, RoomTypeResponse, RoomAvailability
@@ -118,7 +122,16 @@ async def create_room(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create a new room"""
+    """
+    Create a new room (Admin only)
+    """
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can create rooms"
+        )
     # Verify room type exists
     room_type = db.query(RoomType).filter(RoomType.id == room_data.room_type_id).first()
     if not room_type:
@@ -142,16 +155,27 @@ async def create_room(
     return RoomResponse.model_validate(new_room)
 
 
+async def get_optional_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[dict]:
+    """Optional user dependency - returns None if no token provided"""
+    if not credentials:
+        return None
+    token = credentials.credentials
+    payload = verify_token(token)
+    if payload:
+        payload["token"] = token
+    return payload
+
+
 @app.get("/rooms", response_model=List[RoomResponse])
 async def get_rooms(
     room_type_id: Optional[int] = None,
     status: Optional[str] = None,
     floor: Optional[int] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
     """
-    Get list of rooms with optional filters
+    Get list of rooms with optional filters (Public endpoint)
     
     - **room_type_id**: Filter by room type
     - **status**: Filter by status (available, booked, occupied, maintenance)
@@ -173,10 +197,10 @@ async def get_rooms(
 @app.get("/rooms/{room_id}", response_model=RoomResponse)
 async def get_room(
     room_id: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
-    """Get room by ID"""
+    """Get room by ID (Public endpoint)"""
     room = db.query(Room).filter(Room.id == room_id).first()
     if not room:
         raise HTTPException(
@@ -193,7 +217,16 @@ async def update_room(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update room information"""
+    """
+    Update room information (Admin only)
+    """
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can update rooms"
+        )
     room = db.query(Room).filter(Room.id == room_id).first()
     if not room:
         raise HTTPException(
@@ -218,6 +251,38 @@ async def update_room(
     db.commit()
     db.refresh(room)
     return RoomResponse.model_validate(room)
+
+
+@app.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_room(
+    room_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete room (Admin only)
+    """
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can delete rooms"
+        )
+    
+    room = db.query(Room).filter(Room.id == room_id).first()
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Room not found"
+        )
+    
+    # Check if room has active bookings (optional - can be implemented later)
+    # For now, just delete the room
+    
+    db.delete(room)
+    db.commit()
+    return None
 
 
 @app.put("/rooms/{room_id}/status", response_model=RoomResponse)

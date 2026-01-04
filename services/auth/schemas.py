@@ -17,6 +17,14 @@ class UserCreate(UserBase):
     role_name: Optional[str] = "customer"  # Default role
 
 
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None  # Optional password update
+
+
 class UserLogin(BaseModel):
     username: str  # Can be username or email
     password: str

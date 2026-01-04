@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hotel Manager - Admin Dashboard</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="/css/style.css?v=1.1">
+    <link rel="stylesheet" href="/css/admin.css?v=1.1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body class="admin-layout">
@@ -376,17 +376,48 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/jwt-utils.js"></script>
-    <script src="js/router.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/customers.js"></script>
-    <script src="js/rooms.js"></script>
-    <script src="js/bookings.js"></script>
-    <script src="js/payments.js"></script>
-    <script src="js/reports.js"></script>
-    <script src="js/dashboard.js"></script>
-    <script src="js/admin.js"></script>
-    <script src="js/utils.js"></script>
+    <!-- Core utilities - must load first -->
+    <script src="/js/api.js"></script>
+    <script src="/js/jwt-utils.js"></script>
+    <script src="/js/utils.js"></script>
+    <!-- Router - must load before auth and admin -->
+    <script src="/js/router.js"></script>
+    <!-- Auth - needed for token management -->
+    <script src="/js/auth.js"></script>
+    <!-- Admin functionality -->
+    <script src="/js/admin.js"></script>
+    <!-- Page-specific scripts -->
+    <script src="/js/customers.js"></script>
+    <script src="/js/rooms.js"></script>
+    <script src="/js/bookings.js"></script>
+    <script src="/js/payments.js"></script>
+    <script src="/js/reports.js"></script>
+    <script src="/js/dashboard.js"></script>
+    
+    <!-- Initialize router and check access after all scripts loaded -->
+    <script>
+        // Ensure router is initialized and handles routing
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Admin.html: DOM loaded, current hash:', window.location.hash);
+            console.log('Admin.html: Router available?', typeof window.router !== 'undefined');
+            
+            // If router is available, trigger handle to process current route
+            if (typeof window.router !== 'undefined' && window.router.handle) {
+                // Small delay to ensure all scripts are ready
+                setTimeout(() => {
+                    console.log('Admin.html: Triggering router.handle()');
+                    window.router.handle();
+                }, 100);
+            }
+        });
+        
+        // Also handle hash changes
+        window.addEventListener('hashchange', function() {
+            console.log('Admin.html: Hash changed to', window.location.hash);
+            if (typeof window.router !== 'undefined' && window.router.handle) {
+                window.router.handle();
+            }
+        });
+    </script>
 </body>
 </html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Room Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"/>
+    <link rel="stylesheet" href="/css/admin.css" />
+    <script src="/js/rooms.js" defer></script>
+    
+</head>
+<body>
+    <div id="adminLayout"></div>
+
+    <main class="main">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 class="title" style="margin:0;">Room Management</h2>
+            <button onclick="openModal()" class="btn-add" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">
+                <i class="fa-solid fa-plus"></i> Add Room
+            </button>
+        </div>
+
+
+        <div class="status-list">
+        
+        <div class="status-item empty">
+            <div class="status-info">
+                <div class="status-icon-box">
+                    <i class="fa-solid fa-check"></i>
+                </div>
+                <span class="status-label">Empty Room</span>
+            </div>
+            <span class="status-count" id="statEmpty">0</span>
+        </div>
+
+        <div class="status-item rented">
+            <div class="status-info">
+                <div class="status-icon-box">
+                    <i class="fa-solid fa-key"></i>
+                </div>
+                <span class="status-label">Rented Room</span>
+            </div>
+            <span class="status-count" id="statRented">0</span>
+        </div>
+
+        <div class="status-item maintenance">
+            <div class="status-info">
+                <div class="status-icon-box">
+                    <i class="fa-solid fa-screwdriver-wrench"></i>
+                </div>
+                <span class="status-label">Maintenance Room</span>
+            </div>
+            <span class="status-count" id="statMaintenance">0</span>
+        </div>
+        
+
+        <div class="filter-bar">
+            <input type="text" id="filterKeyword" class="filter-input" placeholder="Search name..." style="flex: 2;">
+            <select id="filterStatus" class="filter-input">
+                <option value="">All Status</option>
+                <option value="AVAILABLE">Available</option>
+                <option value="BOOKED">Booked</option>
+                <option value="IN_USE">In Use</option>
+                <option value="CLEANING">Cleaning</option>
+                <option value="MAINTENANCE">Maintenance</option>
+            </select>
+            <button onclick="loadRooms()" style="background: #4b7bec; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer;">
+                <i class="fa-solid fa-search"></i> Search
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th width="80">Image</th>
+                        <th>Room Name</th>
+                        <th>Type</th>
+                        <th>Capacity</th>
+                        <th>Price</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="roomTableBody">
+                    <tr><td colspan="7" style="text-align:center">Loading rooms data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <div id="roomModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle" style="margin-top:0; color:#333;">Add New Room</h2>
+            
+            <form id="roomForm">
+                <input type="hidden" id="roomId"> <div class="form-grid">
+                    <div class="form-group">
+                        <label>Room Name</label>
+                        <input type="text" id="roomName" required placeholder="Ex: 101">
+                    </div>
+                    <div class="form-group">
+                        <label>Room Type</label>
+                        <select id="roomType">
+                            <option value="Single">Single</option>
+                            <option value="Double">Double</option>
+                            <option value="Suite">Suite</option>
+                            <option value="Penthouse">Penthouse</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Price ($)</label>
+                        <input type="number" id="roomPrice" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select id="roomStatus">
+                            <option value="AVAILABLE">Available</option>
+                            <option value="BOOKED">Booked</option>
+                            <option value="IN_USE">In Use</option>
+                            <option value="CLEANING">Cleaning</option>
+                            <option value="MAINTENANCE">Maintenance</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Capacity</label>
+                        <input type="number" id="roomCapacity" required value="2">
+                    </div>
+                    <div class="form-group">
+                        <label>Area (m²)</label>
+                        <input type="number" id="roomArea" required value="30">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Amenities</label>
+                    <div class="amenities-wrapper">
+                        <label class="chk-label"><input type="checkbox" name="amenity" value="Wifi"> Wifi</label>
+                        <label class="chk-label"><input type="checkbox" name="amenity" value="TV"> TV</label>
+                        <label class="chk-label"><input type="checkbox" name="amenity" value="AC"> A/C</label>
+                        <label class="chk-label"><input type="checkbox" name="amenity" value="Fridge"> Fridge</label>
+                        <label class="chk-label"><input type="checkbox" name="amenity" value="Bathtub"> Bathtub</label>
+                        <label class="chk-label"><input type="checkbox" name="amenity" value="View"> View</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Image URL</label>
+                    <input type="text" id="roomImage" placeholder="http://...">
+                </div>
+                
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="roomDesc" rows="2"></textarea>
+                </div>
+
+                <button type="submit" class="btn-save">Save Room</button>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>

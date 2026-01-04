@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>My Profile - Hotel Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="/css/home.css" />
+
+</head>
+<body>
+
+  <div id="header-placeholder"></div>
+
+  <main class="profile-page">
+    
+    <!-- Left Sidebar -->
+    <aside class="profile-sidebar">
+      <div class="profile-avatar">
+        <i class="fa-solid fa-user"></i>
+      </div>
+      <div class="profile-name" id="sidebarName">Name</div>
+      <div class="profile-email" id="sidebarEmail">email@example.com</div>
+
+      <button class="profile-menu-item active" data-section="personal">
+        <i class="fa-regular fa-user"></i>
+        Personal Info
+      </button>
+
+      <button class="profile-menu-item" data-section="password">
+        <i class="fa-solid fa-lock"></i>
+        Change Password
+      </button>
+
+      <button class="profile-menu-item" data-section="notifications">
+        <i class="fa-solid fa-bell"></i>
+        Notifications
+      </button>
+
+      <button class="profile-menu-item" data-section="payment">
+        <i class="fa-solid fa-credit-card"></i>
+        Payment Methods
+      </button>
+
+      <!-- Account Stats -->
+      <div class="profile-stats">
+        <div class="profile-stats-title">Account Stats</div>
+        
+        <div class="profile-stat-item">
+          <span class="profile-stat-label">Total Bookings</span>
+          <span class="profile-stat-value" id="statTotalBookings">0</span>
+        </div>
+
+        <div class="profile-stat-item">
+          <span class="profile-stat-label">Active Reservations</span>
+          <span class="profile-stat-value" id="statActiveReservations">0</span>
+        </div>
+
+        <div class="profile-stat-item">
+          <span class="profile-stat-label">Member Since</span>
+          <span class="profile-stat-value" id="statMemberSince">Jan 2024</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Right Content -->
+    <div class="profile-content">
+
+      <!-- Personal Information Section -->
+      <div id="personalSection" class="profile-section" style="display: block;">
+        <div class="profile-content-header">
+          <div>
+            <h2 class="profile-content-title">Personal Information</h2>
+            <p class="profile-content-subtitle">Update your account details here</p>
+          </div>
+          <button class="btn-edit" id="btnEditPersonal">Edit Profile</button>
+        </div>
+
+        <div class="success-message" id="personalSuccess">Profile updated successfully!</div>
+
+        <form id="personalForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" id="fullName" disabled />
+            </div>
+            <div class="form-group">
+              <label>Email Address</label>
+              <input type="email" id="email" disabled />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Phone Number</label>
+              <input type="tel" id="phone" disabled />
+            </div>
+            <div class="form-group">
+              <label>Passport / ID</label>
+              <input type="text" id="passport" disabled />
+            </div>
+          </div>
+
+          <!-- Address removed per request -->
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Nationality</label>
+              <input type="text" id="nationality" disabled />
+            </div>
+          </div>
+
+          <button type="button" class="btn-save" id="btnSavePersonal" style="display: none;">Save Changes</button>
+        </form>
+      </div>
+
+      <!-- Change Password Section -->
+      <div id="passwordSection" class="profile-section" style="display: none;">
+        <h2 class="profile-content-title">Change Password</h2>
+        <p class="profile-content-subtitle">Update your password regularly for security</p>
+
+        <div class="success-message" id="passwordSuccess">Password changed successfully!</div>
+
+        <form id="passwordForm">
+          <div class="form-row full">
+            <div class="form-group">
+              <label>Current Password</label>
+              <input type="password" id="currentPassword" placeholder="Enter your current password" />
+            </div>
+          </div>
+
+          <div class="form-row full">
+            <div class="form-group">
+              <label>New Password</label>
+              <input type="password" id="newPassword" placeholder="Enter new password" />
+            </div>
+          </div>
+
+          <div class="form-row full">
+            <div class="form-group">
+              <label>Confirm New Password</label>
+              <input type="password" id="confirmPassword" placeholder="Confirm new password" />
+            </div>
+          </div>
+
+          <button type="submit" class="btn-save">Change Password</button>
+        </form>
+      </div>
+
+      <!-- Notifications Section -->
+      <div id="notificationsSection" class="profile-section" style="display: none;">
+        <h2 class="profile-content-title">Notifications</h2>
+        <p class="profile-content-subtitle">Manage your communication preferences</p>
+
+        <div class="preference-item">
+          <div class="preference-info">
+            <h4>Email Notifications</h4>
+            <p>Receive booking confirmations and updates</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="emailNotifications" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="preference-item">
+          <div class="preference-info">
+            <h4>Marketing Emails</h4>
+            <p>Receive special offers and promotions</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="marketingEmails" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="preference-item">
+          <div class="preference-info">
+            <h4>Booking Reminders</h4>
+            <p>Get reminders for your upcoming bookings</p>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="bookingReminders" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Payment Methods Section -->
+      <div id="paymentSection" class="profile-section" style="display: none;">
+        <h2 class="profile-content-title">Payment Methods</h2>
+        <p class="profile-content-subtitle">Manage your payment information</p>
+
+        <div style="text-align: center; padding: 40px 20px; color: #999;">
+          <i class="fa-solid fa-credit-card" style="font-size: 48px; margin-bottom: 15px; opacity: 0.5;"></i>
+          <p>Payment methods feature coming soon!</p>
+        </div>
+      </div>
+
+      <!-- Logout Button -->
+      <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee;">
+        <button class="btn-logout" id="btnLogout">
+          <i class="fa-solid fa-right-from-bracket"></i> Logout
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="footer-placeholder"></div>
+
+  <script src="/user/include.js"></script>
+  <script src="/user/profile.js"></script>
+
+</body>
+</html>

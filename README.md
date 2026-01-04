@@ -60,7 +60,6 @@ docker-compose up -d
 ```
 
 ### Bước 3: Truy cập services
-- **Frontend**: http://localhost:3000
 - Auth Service: http://localhost:8001
 - Customer Service: http://localhost:8002
 - Room Service: http://localhost:8003
@@ -115,3 +114,9 @@ Dự án được đánh giá theo 3 phần chính:
    - Giao diện và hình thức
    - Tài liệu và trình bày báo cáo
 
+
+
+
+mk admin là
+admin@gmail.com
+admin1230

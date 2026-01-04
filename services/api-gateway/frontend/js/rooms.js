@@ -7,12 +7,30 @@ let filteredRooms = [];
 // Load room types
 async function loadRoomTypes() {
     try {
+        // Check if user is authenticated
+        const token = getToken();
+        if (!token) {
+            console.error('No token found, redirecting to login');
+            window.location.href = 'user.html#login';
+            return;
+        }
+        
         showLoading();
         roomTypes = await roomAPI.getRoomTypes();
         renderRoomTypesTable();
     } catch (error) {
         console.error('Failed to load room types:', error);
-        showToast('Không thể tải danh sách loại phòng', 'error');
+        
+        // Check if it's an authentication error
+        if (error.status === 401 || error.status === 403 || error.message?.includes('Unauthorized')) {
+            showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            removeToken();
+            setTimeout(() => {
+                window.location.href = 'user.html#login';
+            }, 2000);
+        } else {
+            showToast(error.message || 'Không thể tải danh sách loại phòng', 'error');
+        }
     } finally {
         hideLoading();
     }
@@ -21,6 +39,14 @@ async function loadRoomTypes() {
 // Load rooms
 async function loadRooms() {
     try {
+        // Check if user is authenticated
+        const token = getToken();
+        if (!token) {
+            console.error('No token found, redirecting to login');
+            window.location.href = 'user.html#login';
+            return;
+        }
+        
         showLoading();
         rooms = await roomAPI.getRooms();
         filteredRooms = [...rooms];
@@ -28,7 +54,17 @@ async function loadRooms() {
         setupRoomSearch();
     } catch (error) {
         console.error('Failed to load rooms:', error);
-        showToast('Không thể tải danh sách phòng', 'error');
+        
+        // Check if it's an authentication error
+        if (error.status === 401 || error.status === 403 || error.message?.includes('Unauthorized')) {
+            showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            removeToken();
+            setTimeout(() => {
+                window.location.href = 'user.html#login';
+            }, 2000);
+        } else {
+            showToast(error.message || 'Không thể tải danh sách phòng', 'error');
+        }
     } finally {
         hideLoading();
     }

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Room Detail - Hotel Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- FontAwesome icon -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
+    referrerpolicy="no-referrer"
+  />
+
+
+</head>
+<body>
+  <!-- Header chung -->
+  <div id="header-placeholder"></div>
+
+  <main class="room-detail-page">
+    <!-- Back link -->
+    <button class="room-back" type="button" onclick="window.history.back()">
+      <i class="fa-solid fa-arrow-left"></i>
+      <span>Back to list</span>
+    </button>
+
+    <div class="room-detail-layout">
+      <!-- LEFT: gallery + info -->
+      <section class="room-detail-main">
+        <!-- gallery -->
+        <div class="room-gallery-main">
+          <img id="roomMainImage" src="/images/rooms/default-room.jpg" alt="Room" />
+        </div>
+        <div class="room-thumbs" id="roomThumbs">
+          <!-- thumbnails render bằng JS -->
+        </div>
+
+        <!-- info block -->
+        <div class="room-info-card">
+          <div class="room-title-row">
+            <span class="room-type-pill" id="roomTypePill">Suite</span>
+            <span class="room-rating-pill" id="roomRatingPill">
+              <i class="fa-solid fa-star"></i>
+              <span id="roomRatingText">4.8 (124 reviews)</span>
+            </span>
+          </div>
+          <h1 class="room-name-detail" id="roomName">Room Name</h1>
+
+          <div class="room-meta-row">
+            <div class="room-meta-item">
+              <i class="fa-solid fa-user-group"></i>
+              <span id="roomGuests">Up to 3 guests</span>
+            </div>
+            <div class="room-meta-item">
+              <i class="fa-regular fa-square"></i>
+              <span id="roomSize">55 m²</span>
+            </div>
+            <div class="room-meta-item">
+              <i class="fa-solid fa-bed"></i>
+              <span id="roomBedType">1 King Bed</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- description -->
+        <section class="room-section-card">
+          <h3>Description</h3>
+          <p id="roomDescription">
+            <!-- JS fill -->
+          </p>
+        </section>
+
+        <!-- amenities -->
+        <section class="room-section-card">
+          <h3>Amenities</h3>
+          <div class="room-amenities-grid" id="roomAmenities">
+            <!-- JS fill -->
+          </div>
+        </section>
+
+        <!-- features -->
+        <section class="room-section-card">
+          <h3>Room Features</h3>
+          <div class="room-features-grid" id="roomFeatures">
+            <!-- JS fill -->
+          </div>
+        </section>
+      </section>
+
+      <!-- RIGHT: booking card -->
+      <aside class="room-book-card">
+        <div class="room-book-price-row">
+          <span class="room-book-price" id="bookingPrice">$0</span>
+          <span class="room-book-per-night">/ night</span>
+        </div>
+        <p class="room-book-note">Taxes and fees included</p>
+
+        <div class="room-book-info">
+          <div class="room-book-info-row">
+            <span class="room-book-label">Room Type</span>
+            <span class="room-book-value" id="bookingRoomType">Suite</span>
+          </div>
+          <div class="room-book-info-row">
+            <span class="room-book-label">Max Guests</span>
+            <span class="room-book-value" id="bookingGuests">3 persons</span>
+          </div>
+          <div class="room-book-info-row">
+            <span class="room-book-label">Room Size</span>
+            <span class="room-book-value" id="bookingSize">55 m²</span>
+          </div>
+          <div class="room-book-info-row">
+            <span class="room-book-label">Bed Type</span>
+            <span class="room-book-value" id="bookingBedType">1 King Bed</span>
+          </div>
+        </div>
+
+        <button class="room-book-btn" id="bookThisRoomBtn">
+          Book This Room
+        </button>
+        <p class="room-book-small-note">
+          Free cancellation up to 24 hours before check-in
+        </p>
+
+        <div class="room-book-badges">
+          <div class="room-book-badge">
+            <div class="room-book-badge-icon room-book-badge-icon-success">
+              <i class="fa-solid fa-check"></i>
+            </div>
+            <div>
+              <div class="room-book-badge-title">Instant Confirmation</div>
+              <div class="room-book-badge-text">Get confirmation immediately</div>
+            </div>
+          </div>
+
+          <div class="room-book-badge">
+            <div class="room-book-badge-icon room-book-badge-icon-info">
+              <i class="fa-solid fa-lock"></i>
+            </div>
+            <div>
+              <div class="room-book-badge-title">Secure Booking</div>
+              <div class="room-book-badge-text">Your information is protected</div>
+            </div>
+          </div>
+
+          <div class="room-book-badge">
+            <div class="room-book-badge-icon room-book-badge-icon-support">
+              <i class="fa-solid fa-headset"></i>
+            </div>
+            <div>
+              <div class="room-book-badge-title">24/7 Support</div>
+              <div class="room-book-badge-text">We're here to help anytime</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- Footer chung -->
+  <div id="footer-placeholder"></div>
+
+    <!-- dùng chung css -->
+  <link rel="stylesheet" href="/user/home.css" />
+  <script src="/include.js" defer></script>
+  <script src="/user/room.js" defer></script>
+</body>
+</html>

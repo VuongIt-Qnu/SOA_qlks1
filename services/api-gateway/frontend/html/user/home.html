@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>User Home</title>
+
+  <!-- gọi file CSS đúng thư mục -->
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+          integrity="sha512-1ycn6IcaQQ40/MKB4Imkb9hQ4C6Z1Z6V2F3lW3k9e6z3Vd3k8vYX0f5H3qZKqCDq5rF3YbY1jS9e+M9qj0eQ=="
+          crossorigin="anonymous" 
+          referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="/css/home.css"></head>
+
+<body>
+
+  <!-- HEADER -->
+  <div id="header"></div>
+
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-overlay"></div>
+
+    <div class="hero-content">
+      <h1>Find Your Perfect Stay</h1>
+      <p>
+        Experience luxury and comfort in our world-class accommodations
+      </p>
+
+      <div class="search-card">
+        <form id="searchForm">
+          <div class="field">
+            <label for="checkIn">
+              <i class="fa-regular fa-calendar"></i>
+              <span>Check-in</span>
+            </label>
+            <input type="date" id="checkIn" name="checkIn" required>
+          </div>
+
+          <div class="field">
+            <label for="checkOut">
+              <i class="fa-regular fa-calendar"></i>
+              <span>Check-out</span>
+            </label>
+            <input type="date" id="checkOut" name="checkOut" required>
+          </div>
+
+          <div class="field">
+            <label for="guests">
+              <i class="fa-solid fa-user-group"></i>
+              <span>Guests</span>
+            </label>
+            <input type="number" id="guests" name="guests" min="1" max="10" value="2" required>
+          </div>
+
+          <button type="submit" class="btn-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>Search Rooms</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Featured Rooms -->
+  <section class="featured">
+    <div class="section-header">
+      <h2 id="roomSectionTitle">Featured Rooms</h2>
+      <p id="roomSectionSubtitle">Selected rooms with premium experience</p>
+    </div>
+
+    <div id="roomGrid" class="room-grid">
+      <!-- cards render ở đây -->
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <div id="footer"></div>
+
+  <!-- JS -->
+  <script src="/user/home.js"></script>
+  <script src="/user/include.js"></script>
+  <script src="/user/components/header.js"></script>
+  <script src="/user/hero-search.js"></script>
+
+
+</body>
+</html>

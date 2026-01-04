@@ -3,12 +3,12 @@ const API_GATEWAY_URL = 'http://localhost:8000';
 
 const API_CONFIG = {
     GATEWAY: API_GATEWAY_URL,
-    AUTH: `${API_GATEWAY_URL}/auth`,
-    CUSTOMER: `${API_GATEWAY_URL}/customers`,
-    ROOM: `${API_GATEWAY_URL}/rooms`,
-    BOOKING: `${API_GATEWAY_URL}/bookings`,
-    PAYMENT: `${API_GATEWAY_URL}/payments`,
-    REPORT: `${API_GATEWAY_URL}/reports`
+    AUTH: `${API_GATEWAY_URL}/api/auth`,
+    CUSTOMER: `${API_GATEWAY_URL}/api/customers`,
+    ROOM: `${API_GATEWAY_URL}/api/rooms`,
+    BOOKING: `${API_GATEWAY_URL}/api/bookings`,
+    PAYMENT: `${API_GATEWAY_URL}/api/payments`,
+    REPORT: `${API_GATEWAY_URL}/api/reports`
 };
 
 // Get stored token
@@ -47,7 +47,16 @@ async function apiRequest(url, options = {}) {
     };
     
     try {
-        console.log('API Request:', url, config); // Debug log
+        // Debug: Log token status
+        if (token) {
+            console.log('API Request with token:', url.substring(0, 80));
+            console.log('Token preview:', token.substring(0, 30) + '...');
+            console.log('Authorization header:', config.headers['Authorization'] ? 'Present' : 'Missing');
+        } else {
+            console.warn('API Request WITHOUT token:', url);
+            console.warn('localStorage.getItem("auth_token"):', localStorage.getItem('auth_token'));
+        }
+        
         const response = await fetch(url, config);
         
         // Check if response is JSON
@@ -63,7 +72,21 @@ async function apiRequest(url, options = {}) {
         
         if (!response.ok) {
             // Extract error message from response
-            const errorMsg = data.detail || data.message || data.error || `HTTP error! status: ${response.status}`;
+            let errorMsg = data.detail || data.message || data.error || `HTTP error! status: ${response.status}`;
+            
+            // Translate common error messages to Vietnamese
+            if (response.status === 401) {
+                errorMsg = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+            } else if (response.status === 403) {
+                errorMsg = 'Bạn không có quyền truy cập tài nguyên này.';
+            } else if (response.status === 404) {
+                errorMsg = 'Không tìm thấy tài nguyên.';
+            } else if (response.status === 500) {
+                errorMsg = 'Lỗi server. Vui lòng thử lại sau.';
+            } else if (response.status === 503) {
+                errorMsg = 'Service không khả dụng. Vui lòng thử lại sau.';
+            }
+            
             const error = new Error(errorMsg);
             error.status = response.status;
             error.data = data;
@@ -108,8 +131,9 @@ const authAPI = {
 
 // Customer API - Routes through API Gateway: /customers/*
 const customerAPI = {
-    getAll: async () => {
-        return apiRequest(`${API_CONFIG.CUSTOMER}/customers`);
+    getAll: async (filters = {}) => {
+        const params = new URLSearchParams(filters).toString();
+        return apiRequest(`${API_CONFIG.CUSTOMER}/customers${params ? '?' + params : ''}`);
     },
     
     getById: async (id) => {

@@ -6,6 +6,14 @@ let filteredCustomers = [];
 // Load customers
 async function loadCustomers() {
     try {
+        // Check if user is authenticated
+        const token = getToken();
+        if (!token) {
+            console.error('No token found, redirecting to login');
+            window.location.href = 'user.html#login';
+            return;
+        }
+        
         showLoading();
         customers = await customerAPI.getAll();
         filteredCustomers = [...customers];
@@ -13,9 +21,22 @@ async function loadCustomers() {
         setupCustomerSearch();
     } catch (error) {
         console.error('Failed to load customers:', error);
-        showToast('Không thể tải danh sách khách hàng', 'error');
-        document.getElementById('customersTableBody').innerHTML = 
-            '<tr><td colspan="6" class="text-center">Lỗi khi tải dữ liệu</td></tr>';
+        
+        // Check if it's an authentication error
+        if (error.status === 401 || error.status === 403 || error.message?.includes('Unauthorized')) {
+            showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            removeToken();
+            setTimeout(() => {
+                window.location.href = 'user.html#login';
+            }, 2000);
+        } else {
+            showToast(error.message || 'Không thể tải danh sách khách hàng', 'error');
+        }
+        
+        const tbody = document.getElementById('customersTableBody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center">Lỗi khi tải dữ liệu</td></tr>';
+        }
     } finally {
         hideLoading();
     }
