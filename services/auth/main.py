@@ -24,7 +24,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,149 +36,92 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# Security scheme
+security = HTTPBearer()
 
+# Import password hashing utilities
+import bcrypt
 
-# Initialize default roles
-def init_default_roles(db: Session):
-    """Initialize default roles if they don't exist"""
-    default_roles = [
-        {"name": "admin", "description": "Quản trị viên - Toàn quyền"},
-        {"name": "manager", "description": "Quản lý - Quản lý hệ thống"},
-        {"name": "receptionist", "description": "Lễ tân - Tiếp nhận và xử lý đặt phòng"},
-        {"name": "customer", "description": "Khách hàng - Người dùng thông thường"}
-    ]
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt (handles MySQL truncation issue)"""
+    # Convert password to bytes
+    password_bytes = password.encode('utf-8')
     
-    for role_data in default_roles:
-        existing_role = db.query(Role).filter(Role.name == role_data["name"]).first()
-        if not existing_role:
-            role = Role(**role_data)
-            db.add(role)
+    # Limit password to 72 bytes for bcrypt (bcrypt limitation)
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
     
-    db.commit()
+    # Generate salt and hash
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    
+    return hashed.decode('utf-8')
 
-
-# Initialize roles on startup
-@app.on_event("startup")
-async def startup_event():
-    db = next(get_db())
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against hashed password (handles MySQL truncation issue)"""
     try:
-        init_default_roles(db)
-    finally:
-        db.close()
+        # Convert to bytes
+        password_bytes = plain_password.encode('utf-8')
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+        
+        hash_bytes = hashed_password.encode('utf-8')
+        
+        # Verify password
+        return bcrypt.checkpw(password_bytes, hash_bytes)
+    except (ValueError, TypeError, Exception) as e:
+        # Hash format is invalid (e.g., truncated or corrupted)
+        print(f"Password verification error: {e}")
+        return False
 
+def get_user_roles(user: User, db: Session) -> List[str]:
+    """Get list of role names for user"""
+    roles = db.query(Role).join(User.roles).filter(User.id == user.id).all()
+    return [role.name for role in roles]
 
-@app.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """
-    Register a new user
-    
-    - **username**: Unique username
-    - **email**: User email
-    - **password**: User password
-    - **full_name**: Full name of user
-    - **role_name**: Role name (default: customer)
-    """
-    # Check if user exists
-    existing_user = db.query(User).filter(
-        (User.username == user_data.username) | (User.email == user_data.email)
-    ).first()
-    
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username or email already registered"
-        )
-    
-    # Get or create role
-    role = db.query(Role).filter(Role.name == user_data.role_name).first()
-    if not role:
-        # If role doesn't exist, default to customer
-        role = db.query(Role).filter(Role.name == "customer").first()
-    
-    # Create new user
-    new_user = User(
-        username=user_data.username,
-        email=user_data.email,
-        full_name=user_data.full_name,
-        hashed_password=hash_password(user_data.password)
-    )
-    
-    db.add(new_user)
-    db.flush()  # Flush to get user ID
-    
-    # Assign role
-    if role:
-        new_user.roles.append(role)
-    
-    db.commit()
-    db.refresh(new_user)
-    
-    # Create access token with roles
-    roles = [r.name for r in new_user.roles]
-    access_token = create_access_token(
-        data={
-            "sub": str(new_user.id),  # JWT requires sub to be a string
-            "username": new_user.username,
-            "roles": roles
-        }
-    )
-    
-    return Token(
-        access_token=access_token,
-        token_type="bearer",
-        user=UserResponse.model_validate(new_user)
-    )
-
-
-@app.post("/login", response_model=Token)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    """
-    Login user and get access token
-    
-    - **username**: Username or email
-    - **password**: User password
-    """
-    # Find user by username or email
+def authenticate_user(username: str, password: str, db: Session) -> Optional[User]:
+    """Authenticate user with username/email and password"""
     user = db.query(User).filter(
-        (User.username == user_data.username) | (User.email == user_data.username)
+        (User.username == username) | (User.email == username)
     ).first()
+    
+    if not user:
+        return None
+    
+    if not verify_password(password, user.hashed_password):
+        return None
+    
+    if not user.is_active:
+        return None
+    
+    return user
+
+@app.get("/", tags=["Health"])
+async def root():
+    """Health check endpoint"""
+    return {"service": "auth", "status": "running"}
+
+@app.post("/login", response_model=Token, tags=["Authentication"])
+async def login(user_data: UserLogin, db: Session = Depends(get_db)):
+    """User login endpoint"""
+    user = authenticate_user(user_data.username, user_data.password, db)
     
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password"
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Check if password hash is valid
-    if not user.hashed_password or not user.hashed_password.startswith(('$2a$', '$2b$', '$2y$')):
-        # Password hash is invalid, need to reset password
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Password hash is invalid. Please contact administrator to reset your password."
-        )
+    # Get user roles
+    roles = get_user_roles(user, db)
     
-    # Verify password
-    if not verify_password(user_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password"
-        )
-    
-    # Check if user is active (is_active can be NULL, treat NULL as active)
-    if user.is_active is False:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is disabled"
-        )
-    
-    # Create access token with roles
-    roles = [r.name for r in user.roles]
+    # Create access token
     access_token = create_access_token(
         data={
-            "sub": str(user.id),  # JWT requires sub to be a string
+            "sub": str(user.id),
             "username": user.username,
+            "email": user.email,
             "roles": roles
         }
     )
@@ -186,112 +132,42 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         user=UserResponse.model_validate(user)
     )
 
-
-@app.post("/reset-password")
-async def reset_password(request: dict, db: Session = Depends(get_db)):
-    """
-    Reset password for a user (for development/testing)
-    WARNING: In production, this should require authentication or be disabled
-    Body: {"username": "username", "new_password": "password"}
-    """
-    username = request.get("username")
-    new_password = request.get("new_password")
-    
-    if not username or not new_password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="username and new_password are required"
-        )
-    
-    user = db.query(User).filter(
-        (User.username == username) | (User.email == username)
-    ).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    # Hash new password
-    user.hashed_password = hash_password(new_password)
-    user.is_active = True
-    db.commit()
-    db.refresh(user)
-    
+@app.post("/verify-token", tags=["Authentication"])
+async def verify_token_endpoint(
+    current_user: dict = Depends(get_current_user)
+):
+    """Verify JWT token endpoint"""
     return {
-        "message": "Password reset successfully",
-        "username": user.username
+        "valid": True,
+        "user": current_user
     }
 
-
-@app.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    """
-    Get current authenticated user information
-    """
-    user = db.query(User).filter(User.id == int(current_user["sub"])).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    return UserResponse.model_validate(user)
-
-
-@app.post("/logout")
-async def logout(current_user: dict = Depends(get_current_user)):
-    """
-    Logout user
-    Note: With stateless JWT, logout is primarily handled client-side by removing the token.
-    This endpoint provides a confirmation response.
-    """
-    return {
-        "message": "Logout successful",
-        "detail": "Token should be removed from client storage"
-    }
-
-
-@app.get("/users", response_model=List[UserResponse])
-async def get_all_users(
+@app.get("/users", response_model=List[UserResponse], tags=["Users"])
+async def get_users(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get all users (Admin only)
-    """
-    # Check if user is admin
+    """Get all users (Admin only)"""
+    # Check admin role
     user_roles = current_user.get("roles", [])
     if "admin" not in user_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can access this endpoint"
+            detail="Only admin can view all users"
         )
     
     users = db.query(User).all()
     return [UserResponse.model_validate(user) for user in users]
 
-
-@app.get("/users/{user_id}", response_model=UserResponse)
-async def get_user(
-    user_id: int,
+@app.get("/users/me", response_model=UserResponse, tags=["Users"])
+async def get_current_user_info(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get user by ID (Admin only)
-    """
-    # Check if user is admin
-    user_roles = current_user.get("roles", [])
-    if "admin" not in user_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can access this endpoint"
-        )
-    
+    """Get current user information"""
+    user_id = int(current_user.get("sub"))
     user = db.query(User).filter(User.id == user_id).first()
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -300,46 +176,103 @@ async def get_user(
     
     return UserResponse.model_validate(user)
 
+@app.get("/users/{user_id}", response_model=UserResponse, tags=["Users"])
+async def get_user(
+    user_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get user by ID (Admin or self)"""
+    # Check if admin or self
+    user_roles = current_user.get("roles", [])
+    current_user_id = int(current_user.get("sub"))
+    
+    if "admin" not in user_roles and current_user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return UserResponse.model_validate(user)
 
-@app.put("/users/{user_id}", response_model=UserResponse)
+@app.post("/users", response_model=UserResponse, tags=["Users"])
+async def create_user(
+    user_data: UserCreate,
+    db: Session = Depends(get_db)
+):
+    """Create new user"""
+    # Check if username or email already exists
+    existing_user = db.query(User).filter(
+        (User.username == user_data.username) | (User.email == user_data.email)
+    ).first()
+    
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username or email already registered"
+        )
+    
+    # Create user
+    user = User(
+        username=user_data.username,
+        email=user_data.email,
+        full_name=user_data.full_name,
+        hashed_password=hash_password(user_data.password),
+        is_active=True
+    )
+    
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    return UserResponse.model_validate(user)
+
+@app.put("/users/{user_id}", response_model=UserResponse, tags=["Users"])
 async def update_user(
     user_id: int,
     user_data: UserUpdate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Update user information (Admin only)
-    """
-    # Check if user is admin
+    """Update user (Admin or self)"""
+    # Check if admin or self
     user_roles = current_user.get("roles", [])
-    if "admin" not in user_roles:
+    current_user_id = int(current_user.get("sub"))
+    
+    if "admin" not in user_roles and current_user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can update users"
+            detail="Access denied"
         )
     
     user = db.query(User).filter(User.id == user_id).first()
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
     
-    # Update user fields
-    update_data = user_data.dict(exclude_unset=True, exclude={'password'})
-    for field, value in update_data.items():
-        setattr(user, field, value)
-    
-    # Handle password update separately
-    if user_data.password:
-        user.hashed_password = hash_password(user_data.password)
+    # Update fields
+    if user_data.email is not None:
+        user.email = user_data.email
+    if user_data.full_name is not None:
+        user.full_name = user_data.full_name
+    if user_data.is_active is not None:
+        user.is_active = user_data.is_active
     
     db.commit()
     db.refresh(user)
     
     return UserResponse.model_validate(user)
-
 
 @app.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
@@ -350,7 +283,7 @@ async def delete_user(
     """
     Delete user (Admin only)
     """
-    # Check if user is admin
+    # Check admin role
     user_roles = current_user.get("roles", [])
     if "admin" not in user_roles:
         raise HTTPException(
@@ -374,37 +307,17 @@ async def delete_user(
     
     db.delete(user)
     db.commit()
+    
     return None
 
-
-@app.get("/roles", response_model=List[RoleResponse])
-async def get_all_roles(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get all roles (Admin only)
-    """
-    user_roles = current_user.get("roles", [])
-    if "admin" not in user_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can access this endpoint"
-        )
-    
-    roles = db.query(Role).all()
-    return [RoleResponse.model_validate(role) for role in roles]
-
-
-@app.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/roles", response_model=RoleResponse, tags=["Roles"])
 async def create_role(
     role_data: RoleCreate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Create a new role (Admin only)
-    """
+    """Create new role (Admin only)"""
+    # Check admin role
     user_roles = current_user.get("roles", [])
     if "admin" not in user_roles:
         raise HTTPException(
@@ -412,7 +325,7 @@ async def create_role(
             detail="Only admin can create roles"
         )
     
-    # Check if role exists
+    # Check if role already exists
     existing_role = db.query(Role).filter(Role.name == role_data.name).first()
     if existing_role:
         raise HTTPException(
@@ -420,117 +333,157 @@ async def create_role(
             detail="Role already exists"
         )
     
-    new_role = Role(**role_data.dict())
-    db.add(new_role)
-    db.commit()
-    db.refresh(new_role)
+    role = Role(
+        name=role_data.name,
+        description=role_data.description
+    )
     
-    return RoleResponse.model_validate(new_role)
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    
+    return RoleResponse.model_validate(role)
 
-
-@app.put("/users/{user_id}/roles", response_model=UserResponse)
-async def update_user_roles(
-    user_id: int,
-    role_names: List[str],
+@app.get("/roles", response_model=List[RoleResponse], tags=["Roles"])
+async def get_roles(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Update user roles (Admin only)
-    """
-    user_roles_list = current_user.get("roles", [])
-    if "admin" not in user_roles_list:
+    """Get all roles (Admin only)"""
+    # Check admin role
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can update user roles"
+            detail="Only admin can view roles"
+        )
+    
+    roles = db.query(Role).all()
+    return [RoleResponse.model_validate(role) for role in roles]
+
+@app.post("/users/{user_id}/roles/{role_id}", tags=["Users"])
+async def assign_role_to_user(
+    user_id: int,
+    role_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Assign role to user (Admin only)"""
+    # Check admin role
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can assign roles"
         )
     
     user = db.query(User).filter(User.id == user_id).first()
+    role = db.query(Role).filter(Role.id == role_id).first()
+    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
     
-    # Get roles
-    roles = db.query(Role).filter(Role.name.in_(role_names)).all()
-    if len(roles) != len(role_names):
+    if not role:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="One or more roles not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Role not found"
         )
     
-    # Update user roles
-    user.roles = roles
+    # Check if role already assigned
+    if role in user.roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role already assigned to user"
+        )
+    
+    user.roles.append(role)
+    db.commit()
+    
+    return {"message": f"Role {role.name} assigned to user {user.username}"}
+
+# @app.delete("/users/{user_id}/roles/{role_id}", tags=["Users"])
+# async def remove_role_from_user(
+    user_id: int,
+    role_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Remove role from user (Admin only)"""
+    # Check admin role
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can remove roles"
+        )
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    role = db.query(Role).filter(Role.id == role_id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Role not found"
+        )
+    
+    # Check if role assigned
+    if role not in user.roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Role not assigned to user"
+        )
+    
+    user.roles.remove(role)
+    db.commit()
+    
+    return {"message": f"Role {role.name} removed from user {user.username}"}
+
+@app.post("/change-password", tags=["Authentication"])
+async def change_password(
+    current_password: str,
+    new_password: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Change user password"""
+    user_id = int(current_user.get("sub"))
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Verify current password
+    if not verify_password(current_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    
+    # Hash new password
+    user.hashed_password = hash_password(new_password)
+    user.is_active = True
     db.commit()
     db.refresh(user)
     
-    return UserResponse.model_validate(user)
+    return {"message": "Password changed successfully"}
 
-
-@app.post("/verify-token")
-async def verify_token_endpoint(token: str):
-    """
-    Verify JWT token validity
-    """
-    payload = verify_token(token)
-    
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-    
-    return {"valid": True, "payload": payload}
-
-
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "auth-service"}
+    return {"status": "healthy", "service": "auth"}
 
-
-# Helper functions
-def hash_password(password: str) -> str:
-    """Hash password using bcrypt"""
-    import bcrypt
-    
-    if not password:
-        raise ValueError("Password cannot be empty")
-    
-    # Bcrypt has a maximum password length of 72 bytes
-    # Convert to bytes and truncate if necessary
-    password_bytes = password.encode('utf-8')
-    if len(password_bytes) > 72:
-        password_bytes = password_bytes[:72]
-    
-    # Generate salt and hash
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password_bytes, salt)
-    
-    # Return as string (bcrypt hash is always valid UTF-8)
-    return hashed.decode('utf-8')
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password against hash"""
-    import bcrypt
-    
-    # Check if hash is valid bcrypt format (should start with $2a$, $2b$, or $2y$)
-    if not hashed_password or not hashed_password.startswith(('$2a$', '$2b$', '$2y$')):
-        return False
-    
-    try:
-        # Convert to bytes
-        password_bytes = plain_password.encode('utf-8')
-        if len(password_bytes) > 72:
-            password_bytes = password_bytes[:72]
-        
-        hash_bytes = hashed_password.encode('utf-8')
-        
-        # Verify password
-        return bcrypt.checkpw(password_bytes, hash_bytes)
-    except (ValueError, TypeError, Exception) as e:
-        # Hash format is invalid (e.g., truncated or corrupted)
-        print(f"Password verification error: {e}")
-        return False
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
