@@ -27,6 +27,33 @@ app = FastAPI(
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Initialize default roles
+def init_default_roles(db: Session):
+    """Initialize default roles if they don't exist"""
+    default_roles = [
+        {"name": "admin", "description": "Quản trị viên - Toàn quyền"},
+        {"name": "manager", "description": "Quản lý - Quản lý hệ thống"},
+        {"name": "receptionist", "description": "Lễ tân - Tiếp nhận và xử lý đặt phòng"},
+        {"name": "customer", "description": "Khách hàng - Người dùng thông thường"}
+    ]
+    
+    for role_data in default_roles:
+        existing_role = db.query(Role).filter(Role.name == role_data["name"]).first()
+        if not existing_role:
+            role = Role(**role_data)
+            db.add(role)
+    
+    db.commit()
+
+# Initialize roles on startup
+@app.on_event("startup")
+async def startup_event():
+    db = next(get_db())
+    try:
+        init_default_roles(db)
+    finally:
+        db.close()
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
@@ -76,8 +103,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_user_roles(user: User, db: Session) -> List[str]:
     """Get list of role names for user"""
-    roles = db.query(Role).join(User.roles).filter(User.id == user.id).all()
-    return [role.name for role in roles]
+    # Refresh user to get latest roles from database
+    db.refresh(user)
+    return [role.name for role in user.roles]
 
 def authenticate_user(username: str, password: str, db: Session) -> Optional[User]:
     """Authenticate user with username/email and password"""
@@ -159,12 +187,29 @@ async def get_users(
     users = db.query(User).all()
     return [UserResponse.model_validate(user) for user in users]
 
+@app.get("/me", response_model=UserResponse, tags=["Authentication"])
+async def get_me(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get current authenticated user information"""
+    user_id = int(current_user.get("sub"))
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return UserResponse.model_validate(user)
+
 @app.get("/users/me", response_model=UserResponse, tags=["Users"])
 async def get_current_user_info(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get current user information"""
+    """Get current user information (Alias for /me)"""
     user_id = int(current_user.get("sub"))
     user = db.query(User).filter(User.id == user_id).first()
     
@@ -203,12 +248,85 @@ async def get_user(
     
     return UserResponse.model_validate(user)
 
+@app.post("/register", response_model=Token, tags=["Authentication"])
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    """
+    Register a new user
+    
+    - **username**: Unique username
+    - **email**: User email
+    - **password**: User password
+    - **full_name**: Full name of user
+    - **role_name**: Role name (default: customer)
+    """
+    # Check if user exists
+    existing_user = db.query(User).filter(
+        (User.username == user_data.username) | (User.email == user_data.email)
+    ).first()
+    
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username or email already registered"
+        )
+    
+    # Get or create role
+    role = db.query(Role).filter(Role.name == user_data.role_name).first()
+    if not role:
+        # If role doesn't exist, default to customer
+        role = db.query(Role).filter(Role.name == "customer").first()
+    
+    # Create new user
+    new_user = User(
+        username=user_data.username,
+        email=user_data.email,
+        full_name=user_data.full_name,
+        hashed_password=hash_password(user_data.password),
+        is_active=True
+    )
+    
+    db.add(new_user)
+    db.flush()  # Flush to get user ID
+    
+    # Assign role
+    if role:
+        new_user.roles.append(role)
+    
+    db.commit()
+    db.refresh(new_user)
+    
+    # Create access token with roles
+    roles = [r.name for r in new_user.roles]
+    access_token = create_access_token(
+        data={
+            "sub": str(new_user.id),  # JWT requires sub to be a string
+            "username": new_user.username,
+            "email": new_user.email,
+            "roles": roles
+        }
+    )
+    
+    return Token(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(new_user)
+    )
+
 @app.post("/users", response_model=UserResponse, tags=["Users"])
 async def create_user(
     user_data: UserCreate,
+    current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Create new user"""
+    """Create new user (Admin only)"""
+    # Check admin role
+    user_roles = current_user.get("roles", [])
+    if "admin" not in user_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can create users"
+        )
+    
     # Check if username or email already exists
     existing_user = db.query(User).filter(
         (User.username == user_data.username) | (User.email == user_data.email)
@@ -220,6 +338,11 @@ async def create_user(
             detail="Username or email already registered"
         )
     
+    # Get or create role
+    role = db.query(Role).filter(Role.name == user_data.role_name).first()
+    if not role:
+        role = db.query(Role).filter(Role.name == "customer").first()
+    
     # Create user
     user = User(
         username=user_data.username,
@@ -230,6 +353,12 @@ async def create_user(
     )
     
     db.add(user)
+    db.flush()
+    
+    # Assign role
+    if role:
+        user.roles.append(role)
+    
     db.commit()
     db.refresh(user)
     
@@ -404,49 +533,7 @@ async def assign_role_to_user(
     
     return {"message": f"Role {role.name} assigned to user {user.username}"}
 
-# @app.delete("/users/{user_id}/roles/{role_id}", tags=["Users"])
-# async def remove_role_from_user(
-    user_id: int,
-    role_id: int,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Remove role from user (Admin only)"""
-    # Check admin role
-    user_roles = current_user.get("roles", [])
-    if "admin" not in user_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admin can remove roles"
-        )
     
-    user = db.query(User).filter(User.id == user_id).first()
-    role = db.query(Role).filter(Role.id == role_id).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    if not role:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Role not found"
-        )
-    
-    # Check if role assigned
-    if role not in user.roles:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role not assigned to user"
-        )
-    
-    user.roles.remove(role)
-    db.commit()
-    
-    return {"message": f"Role {role.name} removed from user {user.username}"}
-
 @app.post("/change-password", tags=["Authentication"])
 async def change_password(
     current_password: str,
