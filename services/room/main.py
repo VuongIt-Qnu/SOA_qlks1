@@ -21,6 +21,17 @@ from shared.utils.http_client import call_service
 from models import Room, RoomType
 from schemas import RoomCreate, RoomUpdate, RoomResponse, RoomTypeCreate, RoomTypeResponse, RoomAvailability
 
+
+async def get_optional_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[dict]:
+    """Optional user dependency - returns None if no token provided"""
+    if not credentials:
+        return None
+    token = credentials.credentials
+    payload = verify_token(token)
+    if payload:
+        payload["token"] = token
+    return payload
+
 app = FastAPI(
     title="Room Service",
     description="Room Management Service for Hotel Management System",
@@ -153,17 +164,6 @@ async def create_room(
     db.commit()
     db.refresh(new_room)
     return RoomResponse.model_validate(new_room)
-
-
-async def get_optional_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[dict]:
-    """Optional user dependency - returns None if no token provided"""
-    if not credentials:
-        return None
-    token = credentials.credentials
-    payload = verify_token(token)
-    if payload:
-        payload["token"] = token
-    return payload
 
 
 @app.get("/rooms", response_model=List[RoomResponse])
