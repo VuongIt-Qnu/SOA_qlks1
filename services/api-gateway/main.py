@@ -202,6 +202,7 @@ def get_service_url(path: str) -> Optional[tuple]:
         if path.startswith(route_prefix):
             # Strip the prefix from path when forwarding to service
             stripped_path = path[len(route_prefix):].lstrip('/')
+            print(f"[API Gateway] Routing: path={path}, route_prefix={route_prefix}, stripped_path={stripped_path}")
             
             # Special handling for /api/users -> forward to /users in auth service
             if route_prefix == "/api/users":
@@ -216,15 +217,35 @@ def get_service_url(path: str) -> Optional[tuple]:
                 # Forward directly (e.g., /api/auth/login -> /login)
                 # No need to add "auth/" prefix
                 pass
+            # Special handling for /api/rooms - some endpoints don't need prefix
+            elif route_prefix == "/api/rooms":
+                # Endpoints like /room-types, /available don't need "rooms/" prefix
+                # They are direct endpoints in room service
+                if not stripped_path:
+                    # Empty path -> /api/rooms -> forward to /rooms
+                    stripped_path = "rooms"
+                elif stripped_path.startswith("room-types"):
+                    # Forward directly without adding "rooms/" prefix
+                    pass
+                elif stripped_path == "available" or stripped_path.startswith("available?"):
+                    # Forward directly without adding "rooms/" prefix
+                    pass
+                elif stripped_path.endswith("/availability") or stripped_path.endswith("/status"):
+                    # For /{id}/availability and /{id}/status, forward directly
+                    pass
+                elif stripped_path and not stripped_path.startswith("rooms/"):
+                    # For other paths like /{id}, add "rooms/" prefix
+                    stripped_path = f"rooms/{stripped_path}"
             # For other /api/* routes, add service name prefix
             elif route_prefix.startswith("/api/"):
-                # Extract service name from prefix (e.g., /api/rooms -> rooms)
+                # Extract service name from prefix (e.g., /api/bookings -> bookings)
                 service_name = route_prefix[5:]  # Remove "/api/"
                 if stripped_path:
                     stripped_path = f"{service_name}/{stripped_path}"
                 else:
                     stripped_path = service_name
             
+            print(f"[API Gateway] Final routing: service_url={service_url}, final_path={stripped_path}")
             return (service_url, stripped_path)
     return None
 
@@ -596,7 +617,7 @@ async def api_gateway_proxy(path: str, request: Request):
         path.startswith("auth/register/") or
         (path == "auth" and request.method == "POST") or
         # Public room endpoints (GET only)
-        (request.method == "GET" and (path == "rooms" or path.startswith("rooms/"))) or
+        (request.method == "GET" and (path == "rooms" or path.startswith("rooms/") or path.startswith("room-types"))) or
         # Notification endpoints (can be called internally by other services)
         path.startswith("notify/")
     )
@@ -679,4 +700,5 @@ async def gateway_proxy(path: str, request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 

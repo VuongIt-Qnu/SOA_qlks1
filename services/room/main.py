@@ -68,10 +68,10 @@ async def create_room_type(
 
 @app.get("/room-types", response_model=List[RoomTypeResponse])
 async def get_room_types(
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
-    """Get all room types"""
+    """Get all room types (Public endpoint - can be accessed without authentication)"""
     return [RoomTypeResponse.model_validate(rt) for rt in db.query(RoomType).all()]
 
 
@@ -324,7 +324,7 @@ async def check_room_availability(
     room_id: int,
     check_in: date,
     check_out: date,
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -372,8 +372,8 @@ async def check_room_availability(
     
     # Check for conflicting bookings via Booking Service
     try:
-        # Get token from current_user
-        token = current_user.get("token", "")
+        # Get token from current_user (if available)
+        token = current_user.get("token", "") if current_user else ""
         auth_header = {"Authorization": f"Bearer {token}"} if token else {}
         
         # Query bookings for this room
@@ -436,7 +436,7 @@ async def get_available_rooms(
     check_in: Optional[date] = None,
     check_out: Optional[date] = None,
     room_type_id: Optional[int] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[dict] = Depends(get_optional_user),
     db: Session = Depends(get_db)
 ):
     """

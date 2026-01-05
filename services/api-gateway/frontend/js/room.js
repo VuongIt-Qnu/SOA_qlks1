@@ -1,7 +1,5 @@
 // static/user/rooms.js
 
-const apiBase = "http://localhost:8080/api";
-
 let allRooms = [];
 let currentPage = 1;
 const pageSize = 12;
@@ -41,15 +39,26 @@ document.addEventListener("DOMContentLoaded", function () {
 
 async function loadRoomDetail(id) {
     try {
-        // 2. Gọi API Backend (Đảm bảo Backend đang chạy ở cổng 8080)
-        const response = await fetch(`http://localhost:8080/api/rooms/${id}`);
-        
-        if (!response.ok) {
-            throw new Error("Không tìm thấy phòng");
-        }
+        // Use roomAPI from api.js if available, otherwise fallback to direct fetch
+        if (typeof roomAPI !== 'undefined' && roomAPI.getRoomById) {
+            const room = await roomAPI.getRoomById(id);
+            renderRoomData(room);
+        } else {
+            // Fallback: Use API_CONFIG or direct fetch
+            const API_GATEWAY_URL = typeof API_CONFIG !== 'undefined' ? API_CONFIG.GATEWAY : 'http://localhost:8000';
+            const response = await fetch(`${API_GATEWAY_URL}/api/rooms/${id}`, {
+                headers: {
+                    'Authorization': `Bearer ${getToken ? getToken() : ''}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error("Không tìm thấy phòng");
+            }
 
-        const room = await response.json();
-        renderRoomData(room);
+            const room = await response.json();
+            renderRoomData(room);
+        }
 
     } catch (error) {
         console.error("Lỗi:", error);

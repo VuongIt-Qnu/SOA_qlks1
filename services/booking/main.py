@@ -469,12 +469,15 @@ async def delete_booking(
             detail="Cannot cancel a checked-out booking"
         )
     
+    # Save old status before updating
+    old_status = booking.status
+    
     # Update booking status to cancelled
     booking.status = "cancelled"
     db.commit()
     
     # Update room status to "available" if not already checked in
-    if booking.status != "checked_in":
+    if old_status != "checked_in":
         token = await get_token(request)
         auth_header = {"Authorization": f"Bearer {token}"}
         try:
@@ -554,12 +557,15 @@ async def cancel_booking(
             detail="Cannot cancel a checked-out booking"
         )
     
+    # Save old status before updating
+    old_status = booking.status
+    
     # Update booking
     booking.status = "cancelled"
     db.commit()
     
     # Update room status to "available" if not already checked in
-    if booking.status != "checked_in":
+    if old_status != "checked_in":
         token = await get_token(request)
         auth_header = {"Authorization": f"Bearer {token}"}
         try:

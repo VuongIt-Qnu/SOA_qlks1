@@ -135,6 +135,7 @@ async function login(username, password) {
         console.log('Current user set:', window.currentUser);
         
         // Show success message
+        showAuthMessage('Đăng nhập thành công', 'success');
         if (typeof showToast === 'function') {
             showToast('Đăng nhập thành công', 'success');
         } else {
@@ -256,16 +257,17 @@ async function login(username, password) {
         const errorMessage = error.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.';
         console.error('Error message to show:', errorMessage);
         
-        // Try to show error in loginMessage element if it exists
-        // const loginMessageEl = document.getElementById('loginMessage');
-        // if (loginMessageEl) {
-        //     loginMessageEl.textContent = errorMessage;
-        //     loginMessageEl.style.display = 'block';
-        //     loginMessageEl.style.color = '#e74c3c';
-        //     setTimeout(() => {
-        //         loginMessageEl.style.display = 'none';
-        //     }, 5000);
-        // }
+        // Show error in authMessage element
+        const authMessageEl = document.getElementById('authMessage');
+        if (authMessageEl) {
+            authMessageEl.textContent = errorMessage;
+            authMessageEl.classList.remove('hidden');
+            authMessageEl.classList.add('error');
+            setTimeout(() => {
+                authMessageEl.classList.add('hidden');
+                authMessageEl.classList.remove('error');
+            }, 5000);
+        }
         
         // Show toast if available
         if (typeof showToast === 'function') {
@@ -288,14 +290,18 @@ async function login(username, password) {
 async function register(userData) {
     // Validation
     if (!validateEmail(userData.email)) {
-        showError('registerError', 'Email không hợp lệ');
-        showToast('Email không hợp lệ', 'error');
+        showAuthMessage('Email không hợp lệ', 'error');
+        if (typeof showToast === 'function') {
+            showToast('Email không hợp lệ', 'error');
+        }
         return false;
     }
     
     if (userData.password.length < 6) {
-        showError('registerError', 'Mật khẩu phải có ít nhất 6 ký tự');
-        showToast('Mật khẩu phải có ít nhất 6 ký tự', 'error');
+        showAuthMessage('Mật khẩu phải có ít nhất 6 ký tự', 'error');
+        if (typeof showToast === 'function') {
+            showToast('Mật khẩu phải có ít nhất 6 ký tự', 'error');
+        }
         return false;
     }
     
@@ -309,7 +315,10 @@ async function register(userData) {
         const response = await authAPI.register(userData);
         setToken(response.access_token);
         window.currentUser = response.user;
-        showToast('Đăng ký thành công', 'success');
+        showAuthMessage('Đăng ký thành công', 'success');
+        if (typeof showToast === 'function') {
+            showToast('Đăng ký thành công', 'success');
+        }
         
         // Check user roles and redirect using router
         // Extract roles from response - handle both array of objects and array of strings
@@ -340,8 +349,11 @@ async function register(userData) {
         
         return true;
     } catch (error) {
-        showError('registerError', error.message || 'Đăng ký thất bại. Vui lòng thử lại.');
-        showToast(error.message || 'Đăng ký thất bại', 'error');
+        const errorMsg = error.message || 'Đăng ký thất bại. Vui lòng thử lại.';
+        showAuthMessage(errorMsg, 'error');
+        if (typeof showToast === 'function') {
+            showToast(errorMsg, 'error');
+        }
         return false;
     } finally {
         hideLoading();
@@ -363,14 +375,34 @@ function logout() {
     }
 }
 
-// Show error message
+// Show message in authMessage element
+function showAuthMessage(message, type = 'error') {
+    const authMessageEl = document.getElementById('authMessage');
+    if (authMessageEl) {
+        authMessageEl.textContent = message;
+        authMessageEl.classList.remove('hidden', 'error', 'success', 'info');
+        authMessageEl.classList.add(type);
+        setTimeout(() => {
+            authMessageEl.classList.add('hidden');
+            authMessageEl.classList.remove('error', 'success', 'info');
+        }, 5000);
+    }
+}
+
+// Show error message (deprecated - use showAuthMessage instead)
 function showError(elementId, message) {
+    // Try to use authMessage if elementId is not found
     const errorEl = document.getElementById(elementId);
-    errorEl.textContent = message;
-    errorEl.classList.add('show');
-    setTimeout(() => {
-        errorEl.classList.remove('show');
-    }, 5000);
+    if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.classList.add('show');
+        setTimeout(() => {
+            errorEl.classList.remove('show');
+        }, 5000);
+    } else {
+        // Fallback to authMessage
+        showAuthMessage(message, 'error');
+    }
 }
 
 // Event listeners
@@ -419,12 +451,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const errorMsg = 'Vui lòng nhập đầy đủ thông tin';
                 console.error('Validation failed:', { username: !!username, password: !!password });
                 
-                // Show error in loginMessage element if it exists
-                const loginMessageEl = document.getElementById('loginMessage');
-                if (loginMessageEl) {
-                    loginMessageEl.textContent = errorMsg;
-                    loginMessageEl.style.display = 'block';
-                    loginMessageEl.style.color = '#e74c3c';
+                // Show error in authMessage element
+                const authMessageEl = document.getElementById('authMessage');
+                if (authMessageEl) {
+                    authMessageEl.textContent = errorMsg;
+                    authMessageEl.classList.remove('hidden');
+                    authMessageEl.classList.add('error');
+                    setTimeout(() => {
+                        authMessageEl.classList.add('hidden');
+                        authMessageEl.classList.remove('error');
+                    }, 5000);
                 }
                 
                 if (typeof showToast === 'function') {
@@ -442,17 +478,46 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('Login form not found (id="loginForm")');
     }
     
-    // Register form (for index.html)
+    // Register form (for register.html and index.html)
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // Get form fields - support both register.html and index.html formats
+            const fullNameEl = document.getElementById('fullName') || document.getElementById('regFullName');
+            const emailEl = document.getElementById('regEmail');
+            const phoneEl = document.getElementById('regPhone');
+            const passwordEl = document.getElementById('regPassword');
+            const confirmPasswordEl = document.getElementById('regConfirm') || document.getElementById('regConfirmPassword');
+            
+            // Validate password confirmation
+            if (confirmPasswordEl && passwordEl && passwordEl.value !== confirmPasswordEl.value) {
+                showAuthMessage('Mật khẩu xác nhận không khớp', 'error');
+                if (typeof showToast === 'function') {
+                    showToast('Mật khẩu xác nhận không khớp', 'error');
+                }
+                return;
+            }
+            
             const userData = {
-                username: document.getElementById('regUsername').value,
-                email: document.getElementById('regEmail').value,
-                full_name: document.getElementById('regFullName').value,
-                password: document.getElementById('regPassword').value
+                email: emailEl ? emailEl.value : '',
+                full_name: fullNameEl ? fullNameEl.value : '',
+                password: passwordEl ? passwordEl.value : ''
             };
+            
+            // Add phone if available (for register.html)
+            if (phoneEl && phoneEl.value) {
+                userData.phone = phoneEl.value;
+            }
+            
+            // Use email as username if username field not found
+            if (!document.getElementById('regUsername')) {
+                userData.username = userData.email;
+            } else {
+                userData.username = document.getElementById('regUsername').value;
+            }
+            
             await register(userData);
         });
     }

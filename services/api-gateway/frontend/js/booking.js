@@ -1,6 +1,4 @@
 document.addEventListener("DOMContentLoaded", function () {
-    const apiBase = "http://localhost:8080/api";
-    
     // 1. Lấy tham số từ URL
     const params = new URLSearchParams(window.location.search);
     const roomId = params.get('id');
@@ -43,11 +41,23 @@ document.addEventListener("DOMContentLoaded", function () {
 
 async function fetchRoomDetail(id) {
     try {
-        const response = await fetch(`http://localhost:8080/api/rooms/${id}`);
-        if (!response.ok) throw new Error("Phòng không tồn tại");
+        // Use roomAPI from api.js if available, otherwise fallback to direct fetch
+        if (typeof roomAPI !== 'undefined' && roomAPI.getRoomById) {
+            const room = await roomAPI.getRoomById(id);
+            renderRoomData(room);
+        } else {
+            // Fallback: Use API_CONFIG or direct fetch
+            const API_GATEWAY_URL = typeof API_CONFIG !== 'undefined' ? API_CONFIG.GATEWAY : 'http://localhost:8000';
+            const response = await fetch(`${API_GATEWAY_URL}/api/rooms/${id}`, {
+                headers: {
+                    'Authorization': `Bearer ${getToken ? getToken() : ''}`
+                }
+            });
+            if (!response.ok) throw new Error("Phòng không tồn tại");
 
-        const room = await response.json();
-        renderRoomData(room);
+            const room = await response.json();
+            renderRoomData(room);
+        }
 
     } catch (error) {
         console.error("Lỗi:", error);
