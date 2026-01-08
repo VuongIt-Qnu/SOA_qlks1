@@ -58,17 +58,31 @@ function loadAdminPageData(pageName) {
             }, 200);
             break;
         case 'customers':
-            loadCustomers();
+            if (typeof loadCustomers === 'function') {
+                loadCustomers();
+            } else {
+                console.error('[loadAdminPageData] loadCustomers function not found');
+            }
             break;
         case 'bookings':
-            loadBookings();
+            if (typeof loadBookings === 'function') {
+                loadBookings();
+            } else {
+                console.error('[loadAdminPageData] loadBookings function not found');
+            }
             break;
         case 'reports':
-            loadReports();
+            if (typeof loadReports === 'function') {
+                loadReports();
+            } else {
+                console.error('[loadAdminPageData] loadReports function not found');
+            }
             break;
         case 'payments':
             if (typeof loadPayments === 'function') {
                 loadPayments();
+            } else {
+                console.error('[loadAdminPageData] loadPayments function not found');
             }
             break;
     }
@@ -167,6 +181,16 @@ async function loadAdminDashboard() {
     } finally {
         hideLoading();
     }
+}
+
+async function safeGetRoom(id) {
+  try { return await roomAPI.getRoomById(id); }
+  catch (e) { if (e.status === 404) return null; throw e; }
+}
+
+async function safeGetCustomer(id) {
+  try { return await customerAPI.getById(id); }
+  catch (e) { if (e.status === 404) return null; throw e; }
 }
 
 // Load recent bookings

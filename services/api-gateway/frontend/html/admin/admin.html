@@ -48,13 +48,15 @@
                 <i class="fas fa-calendar-check"></i>
                 <span>Bookings / Invoices</span>
             </a>
-            <a href="#" class="sidebar-link" data-page="reports">
-                <i class="fas fa-chart-line"></i>
-                <span>Revenue Report</span>
-            </a>
+           
             <a href="#" class="sidebar-link" data-page="payments">
                 <i class="fas fa-credit-card"></i>
                 <span>Payments</span>
+            </a>
+
+             <a href="#" class="sidebar-link" data-page="reports">
+                <i class="fas fa-chart-line"></i>
+                <span>Revenue Report</span>
             </a>
         </nav>
     </aside>
@@ -367,10 +369,10 @@
                 </div>
                 <select id="paymentStatusFilter" class="filter-select">
                     <option value="">All Status</option>
-                    <option value="pending">Pending</option>
-                    <option value="completed">Completed</option>
-                    <option value="failed">Failed</option>
-                    <option value="refunded">Refunded</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="SUCCESS">Success</option>
+                    <option value="FAILED">Failed</option>
+                    <option value="REFUNDED">Refunded</option>
                 </select>
                 <select id="paymentMethodFilter" class="filter-select">
                     <option value="">All Methods</option>

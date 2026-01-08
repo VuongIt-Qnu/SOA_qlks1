@@ -436,8 +436,9 @@ if (document.readyState === 'loading') {
 }
 
 function initCustomersPage() {
-    // Check if we're on the customers management page
-    if (document.getElementById('custTableBody')) {
+    // Check if we're on the customers management page (support both IDs)
+    const tbody = document.getElementById('custTableBody') || document.getElementById('customersTableBody');
+    if (tbody) {
         loadCustomers();
         
         // Close modal when clicking outside

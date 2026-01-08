@@ -79,7 +79,9 @@ function applyPaymentFilters() {
             payment.id.toString().includes(searchTerm) ||
             payment.booking_id.toString().includes(searchTerm) ||
             (payment.transaction_id && payment.transaction_id.toLowerCase().includes(searchTerm));
-        const matchStatus = !statusFilter || payment.payment_status === statusFilter;
+        // Match status case-insensitively (API returns uppercase, filter might be uppercase or lowercase)
+        const matchStatus = !statusFilter || 
+            payment.payment_status?.toUpperCase() === statusFilter.toUpperCase();
         return matchSearch && matchStatus;
     });
     
@@ -108,23 +110,40 @@ function renderPaymentsTable() {
         return;
     }
     
-    tbody.innerHTML = filteredPayments.map(payment => `
+    // Helper function to map payment method
+    const getPaymentMethodName = (method) => {
+        const methodMap = {
+            'CASH': 'Tiền mặt',
+            'CARD': 'Thẻ',
+            'BANK_TRANSFER': 'Chuyển khoản',
+            'E_WALLET': 'Ví điện tử'
+        };
+        return methodMap[method] || method;
+    };
+    
+    tbody.innerHTML = filteredPayments.map(payment => {
+        const status = (payment.payment_status || '').toLowerCase();
+
+        return `
         <tr class="fade-in">
             <td><strong>#${payment.id}</strong></td>
             <td>#${payment.booking_id}</td>
             <td><strong>${formatCurrency(payment.amount)}</strong></td>
-            <td>${payment.payment_method === 'cash' ? 'Tiền mặt' : payment.payment_method === 'card' ? 'Thẻ' : 'Chuyển khoản'}</td>
+            <td>${getPaymentMethodName(payment.payment_method)}</td>
             <td>${getStatusBadge(payment.payment_status)}</td>
             <td>${payment.transaction_id || '-'}</td>
             <td>${formatDate(payment.created_at)}</td>
             <td>
                 <div class="action-buttons">
-                    ${payment.payment_status === 'pending' ? `
+                    <button class="btn btn-primary btn-sm" onclick="showPaymentModal(${payment.id})" title="Sửa">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    ${status === 'pending' ? `
                         <button class="btn btn-success btn-sm" onclick="completePayment(${payment.id})" title="Hoàn tất">
                             <i class="fas fa-check"></i>
                         </button>
                     ` : ''}
-                    ${payment.payment_status === 'completed' ? `
+                    ${status === 'paid' ? `
                         <button class="btn btn-warning btn-sm" onclick="refundPayment(${payment.id})" title="Hoàn tiền">
                             <i class="fas fa-undo"></i>
                         </button>
@@ -132,84 +151,114 @@ function renderPaymentsTable() {
                 </div>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // Show payment modal
 async function showPaymentModal(paymentId = null) {
+    console.log('[showPaymentModal] Called with paymentId:', paymentId);
+    
     // Load bookings
-    const bookings = await bookingAPI.getAll().catch(() => []);
+    const bookings = await bookingAPI.getAll().catch((error) => {
+        console.error('[showPaymentModal] Failed to load bookings:', error);
+        return [];
+    });
+    console.log('[showPaymentModal] Loaded bookings:', bookings.length);
     
-    const payment = paymentId ? payments.find(p => p.id === paymentId) : null;
+    const payment = paymentId ? payments.find(p => p.id === parseInt(paymentId)) : null;
+    console.log('[showPaymentModal] Found payment:', payment);
     
-    const content = `
-        <h2>${payment ? 'Sửa' : 'Tạo'} Thanh Toán</h2>
-        <form id="paymentForm">
-            <div class="form-group">
-                <label>Mã Đặt Phòng *</label>
-                <select id="paymentBookingId" class="form-control" required>
-                    <option value="">Chọn đặt phòng</option>
-                    ${bookings.map(b => `
-                        <option value="${b.id}" ${payment && payment.booking_id === b.id ? 'selected' : ''}>
-                            #${b.id} - ${formatDate(b.check_in)} đến ${formatDate(b.check_out)}
-                        </option>
-                    `).join('')}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Số Tiền (VND) *</label>
-                <input type="number" id="paymentAmount" class="form-control" 
-                    value="${payment ? payment.amount : ''}" required min="0" step="1000">
-            </div>
-            <div class="form-group">
-                <label>Phương Thức Thanh Toán *</label>
-                <select id="paymentMethod" class="form-control" required>
-                    <option value="cash" ${payment && payment.payment_method === 'cash' ? 'selected' : ''}>Tiền mặt</option>
-                    <option value="card" ${payment && payment.payment_method === 'card' ? 'selected' : ''}>Thẻ</option>
-                    <option value="bank_transfer" ${payment && payment.payment_method === 'bank_transfer' ? 'selected' : ''}>Chuyển khoản</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Mã Giao Dịch</label>
-                <input type="text" id="paymentTransactionId" class="form-control" 
-                    value="${payment ? payment.transaction_id || '' : ''}">
-            </div>
-            <div class="form-group">
-                <label>Ghi Chú</label>
-                <textarea id="paymentNotes" class="form-control" rows="3">${payment ? payment.notes || '' : ''}</textarea>
-            </div>
-            <div class="form-group">
-                <button type="submit" class="btn btn-primary btn-block">
-                    <i class="fas fa-save"></i> ${payment ? 'Cập Nhật' : 'Tạo Thanh Toán'}
-                </button>
-            </div>
-        </form>
-    `;
+    const modal = document.getElementById('paymentModal');
+    const modalTitle = document.getElementById('paymentModalTitle');
+    const form = document.getElementById('paymentForm');
     
-    showModal(content);
+    if (!modal || !modalTitle || !form) {
+        console.error('Payment modal elements not found');
+        return;
+    }
     
-    document.getElementById('paymentForm').addEventListener('submit', async (e) => {
+    // Set title
+    modalTitle.textContent = payment ? 'Edit Payment' : 'Add Payment';
+    
+    // Populate booking options
+    const bookingSelect = document.getElementById('paymentBookingId');
+    bookingSelect.innerHTML = '<option value="">Select Booking</option>';
+    bookings.forEach(booking => {
+        const option = document.createElement('option');
+        option.value = booking.id;
+        option.textContent = `#${booking.id} - ${formatDate(booking.check_in)} to ${formatDate(booking.check_out)}`;
+        if (payment && payment.booking_id === booking.id) {
+            option.selected = true;
+        }
+        bookingSelect.appendChild(option);
+    });
+    
+    // Populate form if editing
+    if (payment) {
+        document.getElementById('paymentId').value = payment.id;
+        document.getElementById('paymentAmount').value = payment.amount;
+        document.getElementById('paymentMethod').value = payment.payment_method.toLowerCase();
+        document.getElementById('paymentTransactionId').value = payment.transaction_id || '';
+        document.getElementById('paymentNotes').value = payment.notes || '';
+    } else {
+        // Reset form for new payment
+        document.getElementById('paymentId').value = '';
+        document.getElementById('paymentAmount').value = '';
+        document.getElementById('paymentMethod').value = 'cash';
+        document.getElementById('paymentTransactionId').value = '';
+        document.getElementById('paymentNotes').value = '';
+    }
+    
+    // Show modal
+    modal.classList.add('show');
+    
+    // Handle form submit
+    form.onsubmit = async (e) => {
         e.preventDefault();
+        
+        const bookingId = document.getElementById('paymentBookingId').value;
+        const amount = document.getElementById('paymentAmount').value;
+        const method = document.getElementById('paymentMethod').value;
+        
+        if (!bookingId) {
+            showToast('Please select a booking', 'error');
+            return;
+        }
+        if (!amount || amount <= 0) {
+            showToast('Please enter a valid amount', 'error');
+            return;
+        }
+        if (!method) {
+            showToast('Please select payment method', 'error');
+            return;
+        }
+        
         const paymentData = {
-            booking_id: parseInt(document.getElementById('paymentBookingId').value),
-            amount: parseFloat(document.getElementById('paymentAmount').value),
-            payment_method: document.getElementById('paymentMethod').value,
+            booking_id: parseInt(bookingId),
+            amount: parseFloat(amount),
+            payment_method: method.toUpperCase(),
             transaction_id: document.getElementById('paymentTransactionId').value || null,
             notes: document.getElementById('paymentNotes').value || null
         };
         
         try {
             showLoading();
-            await paymentAPI.create(paymentData);
-            showToast('Tạo thanh toán thành công', 'success');
-            closeAllModals();
-            loadPayments();
+            if (payment) {
+                // Update - but API may not have update endpoint
+                showToast('Update not implemented yet', 'warning');
+            } else {
+                await paymentAPI.create(paymentData);
+                showToast('Payment created successfully', 'success');
+                closeModal();
+                loadPayments();
+            }
         } catch (error) {
-            showToast(error.message || 'Không thể tạo thanh toán', 'error');
+            showToast(error.message || 'Failed to create payment', 'error');
         } finally {
             hideLoading();
         }
-    });
+    };
 }
 
 // Complete payment
@@ -254,9 +303,34 @@ async function refundPayment(id) {
     }
 }
 
+// Initialize when page loads
+function initPaymentsPage() {
+    // Check if we're on the payments management page
+    if (document.getElementById('paymentsTableBody')) {
+        loadPayments();
+    }
+}
+
+// Auto-initialize if DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPaymentsPage);
+} else {
+    initPaymentsPage();
+}
+
+// Close modal
+function closeModal() {
+    const modal = document.getElementById('paymentModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
 // Export
 window.loadPayments = loadPayments;
+window.initPaymentsPage = initPaymentsPage;
 window.showPaymentModal = showPaymentModal;
 window.completePayment = completePayment;
 window.refundPayment = refundPayment;
+window.closeModal = closeModal;
 

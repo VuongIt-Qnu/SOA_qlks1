@@ -154,6 +154,11 @@ function formatCurrency(amount) {
 
 // Get status badge HTML
 function getStatusBadge(status) {
+    if (!status) return '';
+    
+    // Normalize status to lowercase for lookup
+    const normalizedStatus = status.toLowerCase();
+    
     const statusMap = {
         'pending': { class: 'status-pending', text: 'Pending', icon: 'fa-clock' },
         'confirmed': { class: 'status-confirmed', text: 'Confirmed', icon: 'fa-check-circle' },
@@ -164,13 +169,33 @@ function getStatusBadge(status) {
         'available': { class: 'status-available', text: 'Available', icon: 'fa-check' },
         'occupied': { class: 'status-occupied', text: 'Occupied', icon: 'fa-user' },
         'maintenance': { class: 'status-maintenance', text: 'Maintenance', icon: 'fa-tools' },
-        'booked': { class: 'status-booked', text: 'Booked', icon: 'fa-calendar' }
+        'booked': { class: 'status-booked', text: 'Booked', icon: 'fa-calendar' },
+        // Payment statuses
+        'success': { class: 'status-success', text: 'Success', icon: 'fa-check-circle' },
+        'failed': { class: 'status-failed', text: 'Failed', icon: 'fa-times-circle' },
+        'refunded': { class: 'status-refunded', text: 'Refunded', icon: 'fa-undo' }
     };
     
-    const statusInfo = statusMap[status] || { class: 'status-default', text: status, icon: 'fa-circle' };
+    const statusInfo = statusMap[normalizedStatus] || { class: 'status-default', text: status, icon: 'fa-circle' };
     return `<span class="status-badge ${statusInfo.class}">
         <i class="fas ${statusInfo.icon}"></i> ${statusInfo.text}
     </span>`;
+}
+
+// Load admin layout
+async function loadAdminLayout() {
+    const layoutElement = document.getElementById('adminLayout');
+    if (!layoutElement) return;
+    
+    try {
+        const response = await fetch('/html/admin/admin-layout.html');
+        if (response.ok) {
+            const html = await response.text();
+            layoutElement.innerHTML = html;
+        }
+    } catch (error) {
+        console.error('Failed to load admin layout:', error);
+    }
 }
 
 // Export functions
@@ -185,4 +210,5 @@ window.confirmAction = confirmAction;
 window.formatDate = formatDate;
 window.formatCurrency = formatCurrency;
 window.getStatusBadge = getStatusBadge;
+window.loadAdminLayout = loadAdminLayout;
 
