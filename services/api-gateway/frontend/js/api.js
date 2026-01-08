@@ -212,6 +212,13 @@ const roomAPI = {
         });
     },
     
+    updateRoomType: async (id, roomTypeData) => {
+        return apiRequest(`${API_CONFIG.ROOM}/room-types/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(roomTypeData)
+        });
+    },
+    
     getRooms: async (filters = {}) => {
         const params = new URLSearchParams(filters).toString();
         // API_CONFIG.ROOM is already /api/rooms, so just add query params
@@ -450,4 +457,5 @@ const reportAPI = {
         return apiRequest(`${API_CONFIG.REPORT}/dashboard`);
     }
 };
+
 

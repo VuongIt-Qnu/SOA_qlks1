@@ -372,3 +372,8 @@ body {
   color: #4f46e5;
   text-decoration: none;
 }
+
+.toast,
+.toast-container {
+  display: none !important;
+}

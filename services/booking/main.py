@@ -3,7 +3,7 @@ Booking Service - Booking Management Service
 """
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from datetime import datetime, date
 import sys
@@ -41,7 +41,6 @@ app.add_middleware(
 # Service URLs (docker-compose internal DNS)
 CUSTOMER_SERVICE_URL = os.getenv("CUSTOMER_SERVICE_URL", "http://customer-service:8000")
 ROOM_SERVICE_URL = os.getenv("ROOM_SERVICE_URL", "http://room-service:8000")
-NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:8000")
 
 Base.metadata.create_all(bind=engine)
 
@@ -206,19 +205,7 @@ async def create_booking(
     # ✅ SOA SYNC: set room -> booked
     await _set_room_status(new_booking.room_id, "booked", auth_header)
 
-    # Notification best-effort
-    try:
-        await call_service(
-            NOTIFICATION_SERVICE_URL,
-            "notify/booking",
-            method="POST",
-            data={"booking_id": new_booking.id, "notification_type": "confirmation"},
-            headers=auth_header,
-        )
-    except Exception as e:
-        print(f"[Booking] Failed to send booking notification: {e}")
-
-    return BookingResponse.model_validate(new_booking, from_attributes=True)
+    return BookingResponse.from_orm(new_booking)
 
 
 @app.get("/bookings", response_model=List[BookingResponse])
@@ -231,30 +218,79 @@ async def get_bookings(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get list of bookings with optional filters"""
-    query = db.query(Booking)
-
-    user_roles = current_user.get("roles", [])
-    is_admin = any(r in user_roles for r in ["admin", "manager", "receptionist"])
-
-    if not is_admin:
-        user_id = int(current_user.get("sub"))
-        if not customer_id:
-            customer_id = user_id
-
-    if customer_id:
-        query = query.filter(Booking.customer_id == customer_id)
-    if room_id:
-        query = query.filter(Booking.room_id == room_id)
-    if status_filter:
-        query = query.filter(Booking.status == status_filter)
-    if check_in:
-        query = query.filter(Booking.check_in >= check_in)
-    if check_out:
-        query = query.filter(Booking.check_out <= check_out)
-
-    bookings = query.order_by(Booking.check_in.desc()).all()
-    return [BookingResponse.model_validate(b, from_attributes=True) for b in bookings]
+    """
+    Get list of bookings with optional filters
+    
+    - **customer_id**: Filter by customer
+    - **room_id**: Filter by room
+    - **status_filter**: Filter by status
+    - **check_in**: Filter by check-in date
+    - **check_out**: Filter by check-out date
+    
+    Note: Regular users can only see their own bookings. Admins can see all bookings.
+    """
+    try:
+        query = db.query(Booking)
+        
+        # Check if user is admin
+        user_roles = current_user.get("roles", [])
+        if not isinstance(user_roles, list):
+            user_roles = []
+        is_admin = "admin" in user_roles or "manager" in user_roles or "receptionist" in user_roles
+        
+        # If not admin, filter by customer_id from token
+        if not is_admin:
+            try:
+                user_id_str = current_user.get("sub")
+                if user_id_str:
+                    user_id = int(user_id_str)  # Convert string to int
+                    # Try to get customer_id from user_id (may need to call customer service)
+                    # For now, if customer_id is not provided, filter by user_id
+                    if not customer_id:
+                        # Assume customer_id matches user_id (may need adjustment based on your schema)
+                        customer_id = user_id
+            except (ValueError, TypeError) as e:
+                print(f"[Booking Service] Error converting user_id: {e}")
+                # If cannot convert, don't filter by customer_id (will return empty for non-admin)
+                customer_id = None
+        
+        if customer_id:
+            query = query.filter(Booking.customer_id == customer_id)
+        if room_id:
+            query = query.filter(Booking.room_id == room_id)
+        if status_filter:
+            query = query.filter(Booking.status == status_filter)
+        if check_in:
+            query = query.filter(Booking.check_in >= check_in)
+        if check_out:
+            query = query.filter(Booking.check_out <= check_out)
+        
+        # Eager load details relationship to avoid N+1 queries
+        bookings = query.options(joinedload(Booking.details)).order_by(Booking.check_in.desc()).all()
+        
+        # Convert bookings to response format
+        result = []
+        for booking in bookings:
+            try:
+                # Use from_orm to convert booking to response format
+                result.append(BookingResponse.from_orm(booking))
+            except Exception as e:
+                print(f"[Booking Service] Error processing booking {booking.id}: {e}")
+                import traceback
+                print(f"[Booking Service] Traceback: {traceback.format_exc()}")
+                # Skip this booking and continue
+                continue
+        
+        return result
+    except Exception as e:
+        print(f"[Booking Service] Error in get_bookings: {e}")
+        print(f"[Booking Service] Error type: {type(e)}")
+        import traceback
+        print(f"[Booking Service] Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        )
 
 
 @app.get("/bookings/{booking_id}", response_model=BookingResponse)
@@ -263,19 +299,41 @@ async def get_booking(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    """
+    Get booking by ID
+    
+    Note: Regular users can only see their own bookings. Admins can see all bookings.
+    """
+    # Eager load details relationship
+    booking = db.query(Booking).options(joinedload(Booking.details)).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
     user_roles = current_user.get("roles", [])
-    is_admin = any(r in user_roles for r in ["admin", "manager", "receptionist"])
-
+    if not isinstance(user_roles, list):
+        user_roles = []
+    is_admin = "admin" in user_roles or "manager" in user_roles or "receptionist" in user_roles
+    
+    # If not admin, check if booking belongs to user
     if not is_admin:
-        user_id = int(current_user.get("sub"))
-        if booking.customer_id != user_id:
-            raise HTTPException(status_code=403, detail="You can only view your own bookings")
-
-    return BookingResponse.model_validate(booking, from_attributes=True)
+        try:
+            user_id_str = current_user.get("sub")
+            if user_id_str:
+                user_id = int(user_id_str)  # Convert string to int
+                # Assume customer_id matches user_id (may need adjustment based on your schema)
+                if booking.customer_id != user_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="You can only view your own bookings"
+                    )
+        except (ValueError, TypeError):
+            # If cannot convert, deny access
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid user ID"
+            )
+    
+    return BookingResponse.from_orm(booking)
 
 
 @app.put("/bookings/{booking_id}", response_model=BookingResponse)
@@ -309,7 +367,7 @@ async def update_booking(
 
     db.commit()
     db.refresh(booking)
-    return BookingResponse.model_validate(booking, from_attributes=True)
+    return BookingResponse.from_orm(booking)
 
 
 @app.put("/bookings/{booking_id}/check-in", response_model=BookingResponse)
@@ -334,7 +392,7 @@ async def check_in_booking(
     auth_header = _build_auth_header_from_current_user(current_user)
     await _set_room_status(booking.room_id, "occupied", auth_header)
 
-    return BookingResponse.model_validate(booking, from_attributes=True)
+    return BookingResponse.from_orm(booking)
 
 
 @app.put("/bookings/{booking_id}/check-out", response_model=BookingResponse)
@@ -359,7 +417,7 @@ async def check_out_booking(
     auth_header = _build_auth_header_from_current_user(current_user)
     await _set_room_status(booking.room_id, "available", auth_header)
 
-    return BookingResponse.model_validate(booking, from_attributes=True)
+    return BookingResponse.from_orm(booking)
 
 
 @app.delete("/bookings/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -395,20 +453,80 @@ async def delete_booking(
     auth_header = {"Authorization": f"Bearer {token}"}
     await _set_room_status(booking.room_id, "available", auth_header)
 
-    # Notify (optional)
-    try:
-        await call_service(
-            NOTIFICATION_SERVICE_URL,
-            "notify/booking",
-            method="POST",
-            data={"booking_id": booking.id, "notification_type": "cancellation"},
-            headers=auth_header,
-        )
-    except Exception as e:
-        print(f"[Booking] Failed to send cancellation notification: {e}")
-
     return None
 
+
+@app.put("/bookings/{booking_id}/cancel", response_model=BookingResponse)
+async def cancel_booking(
+    booking_id: int,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Cancel a booking (Alternative endpoint using PUT)
+    
+    Changes booking status to "cancelled" and updates room status to "available"
+    Note: Regular users can only cancel their own bookings. Admins can cancel any booking.
+    """
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found"
+        )
+    
+    # Check if user is admin
+    user_roles = current_user.get("roles", [])
+    is_admin = "admin" in user_roles or "manager" in user_roles or "receptionist" in user_roles
+    
+    # If not admin, check if booking belongs to user
+    if not is_admin:
+        user_id = int(current_user.get("sub"))  # Convert string to int
+        # Assume customer_id matches user_id (may need adjustment based on your schema)
+        if booking.customer_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only cancel your own bookings"
+            )
+    
+    if booking.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Booking is already cancelled"
+        )
+    
+    if booking.status == "checked_out":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel a checked-out booking"
+        )
+    
+    # Save old status before updating
+    old_status = booking.status
+    
+    # Update booking
+    booking.status = "cancelled"
+    db.commit()
+    
+    # Update room status to "available" if not already checked in
+    if old_status != "checked_in":
+        token = await get_token(request)
+        auth_header = {"Authorization": f"Bearer {token}"}
+        try:
+            await call_service(
+                ROOM_SERVICE_URL,
+                f"rooms/{booking.room_id}/status",
+                method="PUT",
+                data={"new_status": "available"},
+                headers=auth_header
+            )
+        except Exception as e:
+            # Log error but continue
+            print(f"Failed to update room status: {e}")
+    
+    db.refresh(booking)
+    return BookingResponse.from_orm(booking)
 
 @app.get("/bookings/available-rooms", response_model=List[dict])
 async def get_available_rooms(

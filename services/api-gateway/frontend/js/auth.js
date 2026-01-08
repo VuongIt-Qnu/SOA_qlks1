@@ -133,7 +133,7 @@ async function login(username, password) {
         
         window.currentUser = response.user || null;
         console.log('Current user set:', window.currentUser);
-        
+
         // Show success message
         showAuthMessage('Đăng nhập thành công', 'success');
         if (typeof showToast === 'function') {
@@ -375,19 +375,29 @@ function logout() {
     }
 }
 
-// Show message in authMessage element
-function showAuthMessage(message, type = 'error') {
-    const authMessageEl = document.getElementById('authMessage');
-    if (authMessageEl) {
-        authMessageEl.textContent = message;
-        authMessageEl.classList.remove('hidden', 'error', 'success', 'info');
-        authMessageEl.classList.add(type);
-        setTimeout(() => {
-            authMessageEl.classList.add('hidden');
-            authMessageEl.classList.remove('error', 'success', 'info');
-        }, 5000);
-    }
+// // Show message in authMessage element
+// function showAuthMessage(message, type = 'error') {
+//     const authMessageEl = document.getElementById('authMessage');
+//     if (authMessageEl) {
+//         authMessageEl.textContent = message;
+//         authMessageEl.classList.remove('hidden', 'error', 'success', 'info');
+//         authMessageEl.classList.add(type);
+//         setTimeout(() => {
+//             authMessageEl.classList.add('hidden');
+//             authMessageEl.classList.remove('error', 'success', 'info');
+//         }, 5000);
+//     }
+// }
+
+function showAuthMessage(message, type = "error") {
+  const el = document.getElementById("authMessage");
+  if (!el) return;
+
+  el.textContent = message;
+  el.className = `auth-message ${type}`;
+  el.classList.remove("hidden");
 }
+
 
 // Show error message (deprecated - use showAuthMessage instead)
 function showError(elementId, message) {

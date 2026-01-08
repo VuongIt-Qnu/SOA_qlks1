@@ -81,7 +81,6 @@ ROOM_SERVICE_URL = os.getenv("ROOM_SERVICE_URL", "http://room-service:8000")
 BOOKING_SERVICE_URL = os.getenv("BOOKING_SERVICE_URL", "http://booking-service:8000")
 PAYMENT_SERVICE_URL = os.getenv("PAYMENT_SERVICE_URL", "http://payment-service:8000")
 REPORT_SERVICE_URL = os.getenv("REPORT_SERVICE_URL", "http://report-service:8000")
-NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:8000")
 
 # Service routing map - Map API paths to service URLs
 SERVICE_ROUTES = {
@@ -92,7 +91,6 @@ SERVICE_ROUTES = {
     "/api/bookings": BOOKING_SERVICE_URL,
     "/api/payments": PAYMENT_SERVICE_URL,
     "/api/reports": REPORT_SERVICE_URL,
-    "/api/notify": NOTIFICATION_SERVICE_URL,  # Notification service
     # Legacy routes without /api prefix (for backward compatibility)
     "/auth": AUTH_SERVICE_URL,
     "/users": AUTH_SERVICE_URL,
@@ -101,7 +99,6 @@ SERVICE_ROUTES = {
     "/bookings": BOOKING_SERVICE_URL,
     "/payments": PAYMENT_SERVICE_URL,
     "/reports": REPORT_SERVICE_URL,
-    "/notify": NOTIFICATION_SERVICE_URL,
 }
 
 
@@ -141,6 +138,9 @@ async def proxy_request(
         # Make request to backend service
         async with httpx.AsyncClient(timeout=30.0) as client:
             url = f"{service_url.rstrip('/')}/{path.lstrip('/')}"
+            print(f"[API Gateway] Proxying request: {method} {url}")
+            print(f"[API Gateway] Headers: {list(forward_headers.keys())}")
+            print(f"[API Gateway] Query params: {dict(request.query_params)}")
             
             if method == "GET":
                 response = await client.get(url, headers=forward_headers, params=request.query_params)
@@ -155,30 +155,43 @@ async def proxy_request(
             else:
                 raise HTTPException(status_code=405, detail=f"Method {method} not allowed")
             
+            print(f"[API Gateway] Response status: {response.status_code}")
+            print(f"[API Gateway] Response headers: {dict(response.headers)}")
+            
             # Return response
             try:
+                response_data = response.json()
+                print(f"[API Gateway] Response data type: {type(response_data)}, length: {len(response_data) if isinstance(response_data, list) else 'N/A'}")
                 return JSONResponse(
-                    content=response.json(),
+                    content=response_data,
                     status_code=response.status_code,
                     headers=dict(response.headers)
                 )
-            except:
+            except Exception as json_error:
+                print(f"[API Gateway] Error parsing JSON response: {json_error}")
+                print(f"[API Gateway] Response text: {response.text[:200]}")
                 return JSONResponse(
                     content={"detail": response.text},
                     status_code=response.status_code
                 )
     
-    except httpx.TimeoutException:
+    except httpx.TimeoutException as e:
+        print(f"[API Gateway] Timeout error: {e}")
         raise HTTPException(
             status_code=504,
             detail="Gateway timeout - Service did not respond in time"
         )
-    except httpx.ConnectError:
+    except httpx.ConnectError as e:
+        print(f"[API Gateway] Connection error: {e}")
+        print(f"[API Gateway] Failed to connect to: {service_url}")
         raise HTTPException(
             status_code=503,
-            detail="Service unavailable - Cannot connect to backend service"
+            detail=f"Service unavailable - Cannot connect to backend service at {service_url}"
         )
     except Exception as e:
+        print(f"[API Gateway] Unexpected error in proxy_request: {type(e).__name__}: {e}")
+        import traceback
+        print(f"[API Gateway] Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail=f"Gateway error: {str(e)}"
@@ -243,7 +256,9 @@ def get_service_url(path: str) -> Optional[tuple]:
                 if stripped_path:
                     stripped_path = f"{service_name}/{stripped_path}"
                 else:
+                    # For empty path (e.g., /api/customers -> /customers)
                     stripped_path = service_name
+                print(f"[API Gateway] Service routing: service_name={service_name}, stripped_path={stripped_path}")
             
             print(f"[API Gateway] Final routing: service_url={service_url}, final_path={stripped_path}")
             return (service_url, stripped_path)
@@ -617,9 +632,7 @@ async def api_gateway_proxy(path: str, request: Request):
         path.startswith("auth/register/") or
         (path == "auth" and request.method == "POST") or
         # Public room endpoints (GET only)
-        (request.method == "GET" and (path == "rooms" or path.startswith("rooms/") or path.startswith("room-types"))) or
-        # Notification endpoints (can be called internally by other services)
-        path.startswith("notify/")
+        (request.method == "GET" and (path == "rooms" or path.startswith("rooms/") or path.startswith("room-types")))
     )
     
     # Verify JWT token for all routes except public endpoints

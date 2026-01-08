@@ -11,7 +11,12 @@
     <div id="adminLayout"></div>
 
     <main class="main">
-        <h2 class="title">Bookings & Invoices</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 class="title" style="margin:0;">Bookings & Invoices</h2>
+            <button onclick="openBookingModal()" class="btn-add" style="background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">
+                <i class="fa-solid fa-plus"></i> Add Booking
+            </button>
+        </div>
         
         <div class="table-container">
             <table>
@@ -26,11 +31,61 @@
                         <th>Action</th>
                     </tr>
                 </thead>
-                <tbody id="bookingTableBody">
-                    <tr><td colspan="7">Loading bookings...</td></tr>
+                <tbody id="bookingsTableBody">
+                    <tr><td colspan="7" style="text-align:center">Loading bookings...</td></tr>
                 </tbody>
             </table>
         </div>
     </main>
+
+    <!-- Booking Modal -->
+    <div id="bookingModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeBookingModal()">&times;</span>
+            <h2 id="bookingModalTitle" style="margin-top:0; color:#333;">Add New Booking</h2>
+            
+            <form id="bookingForm">
+                <input type="hidden" id="bookingId">
+                
+                <div class="form-group">
+                    <label>Customer *</label>
+                    <select id="bookingCustomerId" required>
+                        <option value="">Chọn khách hàng</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Room *</label>
+                    <select id="bookingRoomId" required>
+                        <option value="">Chọn phòng</option>
+                    </select>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Check-in Date *</label>
+                        <input type="date" id="bookingCheckIn" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Check-out Date *</label>
+                        <input type="date" id="bookingCheckOut" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Number of Guests *</label>
+                    <input type="number" id="bookingGuests" required min="1" value="1">
+                </div>
+
+                <div class="form-group">
+                    <label>Special Requests</label>
+                    <textarea id="bookingSpecialRequests" rows="3" placeholder="Enter any special requests..."></textarea>
+                </div>
+
+                <button type="submit" class="btn-save">Save Booking</button>
+            </form>
+        </div>
+    </div>
+
 </body>
 </html>

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Load Data</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #4b7bec;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #3867d6;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Load Data - Debug Tool</h1>
+    
+    <div class="test-section">
+        <h3>1. Check Token</h3>
+        <button onclick="checkToken()">Check Token</button>
+        <div id="tokenResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. Test API Gateway Connection</h3>
+        <button onclick="testGateway()">Test Gateway Health</button>
+        <div id="gatewayResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. Test Room Types API</h3>
+        <button onclick="testRoomTypes()">Test GET /api/rooms/room-types</button>
+        <div id="roomTypesResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>4. Test Rooms API</h3>
+        <button onclick="testRooms()">Test GET /api/rooms</button>
+        <div id="roomsResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>5. Test Customers API</h3>
+        <button onclick="testCustomers()">Test GET /api/customers</button>
+        <div id="customersResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>6. Test Bookings API</h3>
+        <button onclick="testBookings()">Test GET /api/bookings</button>
+        <div id="bookingsResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>7. Test Payments API</h3>
+        <button onclick="testPayments()">Test GET /api/payments</button>
+        <div id="paymentsResult" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>8. Check DOM Elements</h3>
+        <button onclick="checkDOM()">Check DOM Elements</button>
+        <div id="domResult" class="result"></div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/jwt-utils.js"></script>
+    <script src="/js/utils.js"></script>
+    
+    <script>
+        function log(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = isError ? 'error' : 'success';
+            element.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            element.scrollTop = element.scrollHeight;
+        }
+        
+        function clearLog(elementId) {
+            document.getElementById(elementId).innerHTML = '';
+        }
+        
+        async function checkToken() {
+            clearLog('tokenResult');
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                log('tokenResult', `✅ Token found: ${token.substring(0, 50)}...`);
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    log('tokenResult', `✅ Token payload: ${JSON.stringify(payload, null, 2)}`);
+                } catch (e) {
+                    log('tokenResult', `⚠️ Cannot parse token: ${e.message}`, true);
+                }
+            } else {
+                log('tokenResult', '❌ No token found in localStorage', true);
+            }
+        }
+        
+        async function testGateway() {
+            clearLog('gatewayResult');
+            try {
+                log('gatewayResult', 'Testing API Gateway health endpoint...');
+                const response = await fetch('http://localhost:8000/health');
+                const data = await response.json();
+                log('gatewayResult', `✅ Gateway is running: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log('gatewayResult', `❌ Gateway error: ${error.message}`, true);
+            }
+        }
+        
+        async function testRoomTypes() {
+            clearLog('roomTypesResult');
+            try {
+                log('roomTypesResult', 'Testing GET /api/rooms/room-types...');
+                const token = localStorage.getItem('auth_token');
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch('http://localhost:8000/api/rooms/room-types', {
+                    method: 'GET',
+                    headers: headers
+                });
+                
+                log('roomTypesResult', `Response status: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log('roomTypesResult', `❌ Error response: ${errorText}`, true);
+                    return;
+                }
+                
+                const data = await response.json();
+                log('roomTypesResult', `✅ Success! Received ${Array.isArray(data) ? data.length : 'non-array'} items`);
+                log('roomTypesResult', `Data: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log('roomTypesResult', `❌ Error: ${error.message}`, true);
+                log('roomTypesResult', `Stack: ${error.stack}`, true);
+            }
+        }
+        
+        async function testRooms() {
+            clearLog('roomsResult');
+            try {
+                log('roomsResult', 'Testing GET /api/rooms...');
+                const token = localStorage.getItem('auth_token');
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch('http://localhost:8000/api/rooms', {
+                    method: 'GET',
+                    headers: headers
+                });
+                
+                log('roomsResult', `Response status: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log('roomsResult', `❌ Error response: ${errorText}`, true);
+                    return;
+                }
+                
+                const data = await response.json();
+                log('roomsResult', `✅ Success! Received ${Array.isArray(data) ? data.length : 'non-array'} items`);
+                log('roomsResult', `Data: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log('roomsResult', `❌ Error: ${error.message}`, true);
+                log('roomsResult', `Stack: ${error.stack}`, true);
+            }
+        }
+        
+        async function testCustomers() {
+            clearLog('customersResult');
+            try {
+                log('customersResult', 'Testing GET /api/customers...');
+                const token = localStorage.getItem('auth_token');
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch('http://localhost:8000/api/customers', {
+                    method: 'GET',
+                    headers: headers
+                });
+                
+                log('customersResult', `Response status: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log('customersResult', `❌ Error response: ${errorText}`, true);
+                    return;
+                }
+                
+                const data = await response.json();
+                log('customersResult', `✅ Success! Received ${Array.isArray(data) ? data.length : 'non-array'} items`);
+                log('customersResult', `Data: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log('customersResult', `❌ Error: ${error.message}`, true);
+                log('customersResult', `Stack: ${error.stack}`, true);
+            }
+        }
+        
+        async function testBookings() {
+            clearLog('bookingsResult');
+            try {
+                log('bookingsResult', 'Testing GET /api/bookings...');
+                const token = localStorage.getItem('auth_token');
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch('http://localhost:8000/api/bookings', {
+                    method: 'GET',
+                    headers: headers
+                });
+                
+                log('bookingsResult', `Response status: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log('bookingsResult', `❌ Error response: ${errorText}`, true);
+                    return;
+                }
+                
+                const data = await response.json();
+                log('bookingsResult', `✅ Success! Received ${Array.isArray(data) ? data.length : 'non-array'} items`);
+                log('bookingsResult', `Data: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log('bookingsResult', `❌ Error: ${error.message}`, true);
+                log('bookingsResult', `Stack: ${error.stack}`, true);
+            }
+        }
+        
+        async function testPayments() {
+            clearLog('paymentsResult');
+            try {
+                log('paymentsResult', 'Testing GET /api/payments...');
+                const token = localStorage.getItem('auth_token');
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch('http://localhost:8000/api/payments', {
+                    method: 'GET',
+                    headers: headers
+                });
+                
+                log('paymentsResult', `Response status: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log('paymentsResult', `❌ Error response: ${errorText}`, true);
+                    return;
+                }
+                
+                const data = await response.json();
+                log('paymentsResult', `✅ Success! Received ${Array.isArray(data) ? data.length : 'non-array'} items`);
+                log('paymentsResult', `Data: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                log('paymentsResult', `❌ Error: ${error.message}`, true);
+                log('paymentsResult', `Stack: ${error.stack}`, true);
+            }
+        }
+        
+        function checkDOM() {
+            clearLog('domResult');
+            log('domResult', 'Checking DOM elements...');
+            log('domResult', `Current page: ${window.location.pathname}`);
+            log('domResult', `Current page includes admin.html: ${window.location.pathname.includes('admin.html')}`);
+            
+            const elements = [
+                'roomTypesTableBody',
+                'roomsTableBody',
+                'roomTableBody',
+                'custTableBody',
+                'bookingsTableBody',
+                'paymentsTableBody',
+                'notificationsTableBody',
+                'adminRoomsPage',
+                'adminCustomersPage',
+                'adminBookingsPage',
+                'adminPaymentsPage',
+                'adminNotificationsPage'
+            ];
+            
+            let foundCount = 0;
+            elements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    log('domResult', `✅ Found: ${id}`);
+                    foundCount++;
+                } else {
+                    log('domResult', `❌ Not found: ${id}`, true);
+                }
+            });
+            
+            log('domResult', `\nSummary: Found ${foundCount}/${elements.length} elements`);
+            
+            if (foundCount === 0) {
+                log('domResult', '\n⚠️ NOTE: This test page is not admin.html. These elements only exist in admin.html.', true);
+                log('domResult', 'To test DOM elements, please open http://localhost:8000/admin.html and run this test there.', true);
+            }
+        }
+        
+        // Auto check on load
+        window.addEventListener('load', () => {
+            checkToken();
+            checkDOM();
+        });
+    </script>
+</body>
+</html>
+

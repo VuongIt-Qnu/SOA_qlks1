@@ -7,6 +7,7 @@ if (typeof window.currentUser === 'undefined') {
 
 // Show admin page
 function showAdminPage(pageName) {
+    console.log('[showAdminPage] Showing page:', pageName);
     document.querySelectorAll('.admin-page').forEach(page => {
         page.classList.remove('active');
     });
@@ -14,6 +15,9 @@ function showAdminPage(pageName) {
     const pageElement = document.getElementById(`admin${pageName.charAt(0).toUpperCase() + pageName.slice(1)}Page`);
     if (pageElement) {
         pageElement.classList.add('active');
+        console.log('[showAdminPage] Page element activated:', pageElement.id);
+    } else {
+        console.error('[showAdminPage] Page element not found for:', pageName);
     }
     
     // Update sidebar links
@@ -24,8 +28,11 @@ function showAdminPage(pageName) {
         }
     });
     
-    // Load page data
-    loadAdminPageData(pageName);
+    // Load page data with a small delay to ensure DOM is ready
+    setTimeout(() => {
+        console.log('[showAdminPage] Loading page data for:', pageName);
+        loadAdminPageData(pageName);
+    }, 100);
 }
 
 // Load admin page data
@@ -35,8 +42,20 @@ function loadAdminPageData(pageName) {
             loadAdminDashboard();
             break;
         case 'rooms':
-            loadRoomTypes();
-            loadRooms();
+            // Load room types first
+            if (typeof loadRoomTypes === 'function') {
+                loadRoomTypes();
+            } else {
+                console.error('loadRoomTypes function not found');
+            }
+            // Load rooms after a small delay to ensure room types are loaded
+            setTimeout(() => {
+                if (typeof loadRooms === 'function') {
+                    loadRooms();
+                } else {
+                    console.error('loadRooms function not found');
+                }
+            }, 200);
             break;
         case 'customers':
             loadCustomers();
@@ -46,6 +65,11 @@ function loadAdminPageData(pageName) {
             break;
         case 'reports':
             loadReports();
+            break;
+        case 'payments':
+            if (typeof loadPayments === 'function') {
+                loadPayments();
+            }
             break;
     }
 }

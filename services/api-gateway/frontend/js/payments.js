@@ -5,7 +5,25 @@ let filteredPayments = [];
 
 // Load payments
 async function loadPayments() {
+    const tbody = document.getElementById('paymentsTableBody');
+    
+    // Show loading in table
+    if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Đang tải dữ liệu...</td></tr>';
+    }
+    
     try {
+        // Check if user is authenticated
+        const token = getToken();
+        if (!token) {
+            console.error('No token found, redirecting to login');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">Vui lòng đăng nhập...</td></tr>';
+            }
+            window.location.href = 'user.html#login';
+            return;
+        }
+        
         showLoading();
         payments = await paymentAPI.getAll();
         filteredPayments = [...payments];
@@ -13,7 +31,22 @@ async function loadPayments() {
         setupPaymentSearch();
     } catch (error) {
         console.error('Failed to load payments:', error);
-        showToast('Không thể tải danh sách thanh toán', 'error');
+        
+        // Show error in table
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center">Lỗi khi tải dữ liệu</td></tr>';
+        }
+        
+        // Check if it's an authentication error
+        if (error.status === 401 || error.status === 403 || error.message?.includes('Unauthorized')) {
+            showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error');
+            removeToken();
+            setTimeout(() => {
+                window.location.href = 'user.html#login';
+            }, 2000);
+        } else {
+            showToast(error.message || 'Không thể tải danh sách thanh toán', 'error');
+        }
     } finally {
         hideLoading();
     }
@@ -56,6 +89,10 @@ function applyPaymentFilters() {
 // Render payments table
 function renderPaymentsTable() {
     const tbody = document.getElementById('paymentsTableBody');
+    if (!tbody) {
+        console.error('[renderPaymentsTable] paymentsTableBody not found');
+        return;
+    }
     
     if (filteredPayments.length === 0) {
         tbody.innerHTML = `
