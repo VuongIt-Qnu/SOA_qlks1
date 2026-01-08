@@ -1,16 +1,18 @@
 """
 Booking Service - Pydantic Schemas
 """
-from pydantic import BaseModel
-from typing import Optional, List
 from datetime import date, datetime
+from typing import Optional, List
+
+from pydantic import BaseModel, ConfigDict
 
 
 class BookingBase(BaseModel):
     customer_id: int
     room_id: int
-    check_in: str  # ISO format date string
-    check_out: str  # ISO format date string
+    # ✅ FIX: DB là DATE => schema phải là date (không phải str)
+    check_in: date
+    check_out: date
     guests: int = 1
     special_requests: Optional[str] = None
 
@@ -22,8 +24,9 @@ class BookingCreate(BookingBase):
 class BookingUpdate(BaseModel):
     customer_id: Optional[int] = None
     room_id: Optional[int] = None
-    check_in: Optional[str] = None
-    check_out: Optional[str] = None
+    # ✅ update cũng để date để đồng bộ
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
     guests: Optional[int] = None
     status: Optional[str] = None
     total_amount: Optional[float] = None
@@ -47,9 +50,8 @@ class BookingDetailResponse(BookingDetailBase):
     id: int
     booking_id: int
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BookingResponse(BookingBase):
@@ -61,9 +63,8 @@ class BookingResponse(BookingBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     details: List[BookingDetailResponse] = []
-    
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RoomAvailabilityCheck(BaseModel):
