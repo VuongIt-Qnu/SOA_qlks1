@@ -1,66 +1,72 @@
-if (typeof window.currentUser === 'undefined') {
-    window.currentUser = null;
-}
+// ========= Auth page logic (safe, no "authAPI not ready") =========
+(function () {
+  // set background image for left panel
+  function applyBg() {
+    const bg = window.AUTH_BG_IMAGE || "/image/login%20and%20register.jpg";
+    document.documentElement.style.setProperty("--auth-bg", `url("${bg}")`);
+  }
 
-// Check if user is logged in
-function checkAuth() {
-    const token = getToken();
-    if (token) {
-        loadUserInfo();
-        showAuthenticatedUI();
+  function ensureAuthMessageEl() {
+    let el = document.getElementById("authMessage");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "authMessage";
+      el.className = "auth-message hidden";
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function showAuthMessage(message, type = "error") {
+    const el = ensureAuthMessageEl();
+    el.textContent = message;
+    el.classList.remove("hidden", "error", "success", "info");
+    el.classList.add(type);
+
+    window.clearTimeout(showAuthMessage._t);
+    showAuthMessage._t = window.setTimeout(() => {
+      el.classList.add("hidden");
+      el.classList.remove("error", "success", "info");
+    }, 5000);
+  }
+
+  function setButtonLoading(btn, isLoading) {
+    if (!btn) return;
+    btn.disabled = !!isLoading;
+    if (isLoading) {
+      btn.dataset._oldText = btn.textContent;
+      btn.textContent = "Please wait...";
     } else {
-        showLoginUI();
+      btn.textContent = btn.dataset._oldText || btn.textContent;
+      delete btn.dataset._oldText;
     }
-}
+  }
 
-// Load user info
-async function loadUserInfo() {
-    try {
-        console.log('[loadUserInfo] Calling authAPI.getMe()...');
-        window.currentUser = await authAPI.getMe();
-        console.log('[loadUserInfo] User info loaded:', window.currentUser);
-        if (document.getElementById('userInfo')) {
-            document.getElementById('userInfo').textContent = `Xin chào, ${window.currentUser.username}`;
-        }
-    } catch (error) {
-        console.error('[loadUserInfo] Failed to load user info:', error);
-        console.error('[loadUserInfo] Error status:', error.status);
-        console.error('[loadUserInfo] Error message:', error.message);
-        
-        // Only logout if it's a real authentication error (401/403)
-        if (error.status === 401 || error.status === 403) {
-            console.warn('[loadUserInfo] Authentication failed, logging out');
-            logout();
-        } else {
-            // For other errors, just log and continue
-            console.warn('[loadUserInfo] Non-auth error, not logging out');
-        }
+  function getRolesFromResponseOrToken(res) {
+    if (res && res.user && Array.isArray(res.user.roles)) {
+      return res.user.roles.map(r => {
+        if (typeof r === "string") return r.toLowerCase().trim();
+        if (r && typeof r === "object" && r.name) return String(r.name).toLowerCase().trim();
+        return String(r).toLowerCase().trim();
+      });
     }
-}
+    if (typeof window.getUserRoles === "function") {
+      const roles = window.getUserRoles();
+      if (Array.isArray(roles)) return roles.map(x => String(x).toLowerCase().trim());
+      if (roles) return [String(roles).toLowerCase().trim()];
+    }
+    return [];
+  }
 
-// Show authenticated UI
-function showAuthenticatedUI() {
-    const loginBtn = document.getElementById('loginBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const userInfo = document.getElementById('userInfo');
-    const loginPage = document.getElementById('loginPage');
-    
-    if (loginBtn) loginBtn.style.display = 'none';
-    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
-    if (userInfo) {
-        userInfo.style.display = 'inline';
-        if (window.currentUser) {
-            userInfo.textContent = `Xin chào, ${window.currentUser.username}`;
-        }
+  function isAdminRoles(roles) {
+    if (typeof window.checkIsAdmin !== "undefined") {
+      try { return window.checkIsAdmin(roles); } catch (_) {}
     }
-    
-    // Hide login page, show dashboard (only if loginPage exists)
-    if (loginPage) {
-        loginPage.classList.remove('active');
-        showPage('dashboard');
-    }
-}
+    const adminRoles = ["admin", "manager", "receptionist"];
+    return Array.isArray(roles) && roles.some(r => adminRoles.includes(String(r).toLowerCase().trim()));
+  }
 
+<<<<<<< HEAD
 // Show login UI
 function showLoginUI() {
     const loginBtn = document.getElementById('loginBtn');
@@ -246,135 +252,54 @@ async function login(username, password) {
         setTimeout(attemptRedirect, 100);
         
         console.log('=== LOGIN SUCCESS ===');
+=======
+  // ✅ Wait until api.js attaches window.authAPI
+  async function waitForAuthAPI(timeoutMs = 5000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (window.authAPI && typeof window.authAPI.login === "function" && typeof window.authAPI.register === "function") {
+>>>>>>> 88ea35c (update)
         return true;
-    } catch (error) {
-        console.error('=== LOGIN ERROR ===');
-        console.error('Error:', error);
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
-        
-        // Show error message
-        const errorMessage = error.message || 'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.';
-        console.error('Error message to show:', errorMessage);
-        
-        // Show error in authMessage element
-        const authMessageEl = document.getElementById('authMessage');
-        if (authMessageEl) {
-            authMessageEl.textContent = errorMessage;
-            authMessageEl.classList.remove('hidden');
-            authMessageEl.classList.add('error');
-            setTimeout(() => {
-                authMessageEl.classList.add('hidden');
-                authMessageEl.classList.remove('error');
-            }, 5000);
-        }
-        
-        // Show toast if available
-        if (typeof showToast === 'function') {
-            showToast(errorMessage, 'error');
-        } else {
-            alert(errorMessage); // Fallback to alert
-        }
-        
-        return false;
-    } finally {
-        // Hide loading if function exists
-        if (typeof hideLoading === 'function') {
-            hideLoading();
-        }
-        console.log('=== LOGIN FINALLY ===');
+      }
+      await new Promise(r => setTimeout(r, 50));
     }
-}
+    return false;
+  }
 
-// Register
-async function register(userData) {
-    // Validation
-    if (!validateEmail(userData.email)) {
-        showAuthMessage('Email không hợp lệ', 'error');
-        if (typeof showToast === 'function') {
-            showToast('Email không hợp lệ', 'error');
-        }
-        return false;
-    }
-    
-    if (userData.password.length < 6) {
-        showAuthMessage('Mật khẩu phải có ít nhất 6 ký tự', 'error');
-        if (typeof showToast === 'function') {
-            showToast('Mật khẩu phải có ít nhất 6 ký tự', 'error');
-        }
-        return false;
-    }
-    
-    // Set default role to customer if not specified
-    if (!userData.role_name) {
-        userData.role_name = 'customer';
-    }
-    
+  async function doLogin(username, password) {
+    const ok = await waitForAuthAPI(5000);
+    if (!ok) throw new Error("Hệ thống API chưa sẵn sàng (api.js). Hãy hard reload Ctrl+Shift+R.");
+
+    const res = await window.authAPI.login(username, password);
+    if (!res || !res.access_token) throw new Error("Phản hồi login không hợp lệ (thiếu access_token).");
+
+    if (typeof window.setToken !== "function") throw new Error("setToken chưa tồn tại (kiểm tra /js/jwt-utils.js).");
+    window.setToken(res.access_token);
+
+    // load me (optional)
     try {
-        showLoading();
-        const response = await authAPI.register(userData);
-        setToken(response.access_token);
-        window.currentUser = response.user;
-        showAuthMessage('Đăng ký thành công', 'success');
-        if (typeof showToast === 'function') {
-            showToast('Đăng ký thành công', 'success');
-        }
-        
-        // Check user roles and redirect using router
-        // Extract roles from response - handle both array of objects and array of strings
-        let userRoles = [];
-        if (response.user?.roles) {
-            userRoles = response.user.roles.map(r => {
-                // Handle both {name: "admin"} and "admin" formats
-                return typeof r === 'string' ? r : r.name;
-            });
-        } else {
-            // Fallback to JWT token roles
-            userRoles = getUserRoles();
-        }
-        
-        console.log('User roles after register:', userRoles);
-        
-        // Sử dụng router để điều hướng
-        if (typeof router !== 'undefined' && router.onRegisterSuccess) {
-            router.onRegisterSuccess(userRoles);
-        } else {
-            // Fallback nếu router chưa load
-            if (userRoles.includes('admin') || userRoles.includes('manager') || userRoles.includes('receptionist')) {
-                window.location.href = 'admin.html#dashboard';
-            } else {
-                window.location.href = 'user.html#home';
-            }
-        }
-        
-        return true;
-    } catch (error) {
-        const errorMsg = error.message || 'Đăng ký thất bại. Vui lòng thử lại.';
-        showAuthMessage(errorMsg, 'error');
-        if (typeof showToast === 'function') {
-            showToast(errorMsg, 'error');
-        }
-        return false;
-    } finally {
-        hideLoading();
+      if (window.authAPI.getMe && typeof window.authAPI.getMe === "function") {
+        window.currentUser = await window.authAPI.getMe();
+      } else {
+        window.currentUser = res.user || null;
+      }
+    } catch (_) {
+      window.currentUser = res.user || null;
     }
-}
 
-// Logout
-function logout() {
-    removeToken();
-    window.currentUser = null;
-    showToast('Đã đăng xuất', 'info');
-    
-    // Sử dụng router để logout
-    if (typeof router !== 'undefined' && router.logout) {
-        router.logout();
+    const roles = getRolesFromResponseOrToken(res);
+
+    // redirect
+    if (window.router && typeof window.router.onLoginSuccess === "function") {
+      window.router.onLoginSuccess(roles);
     } else {
-        // Fallback
-        showLoginUI();
+      if (isAdminRoles(roles)) window.location.href = "/admin/admin.html#dashboard";
+      else window.location.href = "/user/user.html#home";
     }
-}
+    return true;
+  }
 
+<<<<<<< HEAD
 // // Show message in authMessage element
 // function showAuthMessage(message, type = 'error') {
 //     const authMessageEl = document.getElementById('authMessage');
@@ -409,161 +334,138 @@ function showError(elementId, message) {
         setTimeout(() => {
             errorEl.classList.remove('show');
         }, 5000);
-    } else {
-        // Fallback to authMessage
-        showAuthMessage(message, 'error');
-    }
-}
+=======
+  async function doRegister(userData) {
+    const ok = await waitForAuthAPI(5000);
+    if (!ok) throw new Error("Hệ thống API chưa sẵn sàng (api.js). Hãy hard reload Ctrl+Shift+R.");
 
-// Event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    // Login form (for login.html - uses email field)
-    const loginForm = document.getElementById('loginForm');
+    const res = await window.authAPI.register(userData);
+    if (!res || !res.access_token) throw new Error("Phản hồi register không hợp lệ (thiếu access_token).");
+
+    if (typeof window.setToken !== "function") throw new Error("setToken chưa tồn tại (kiểm tra /js/jwt-utils.js).");
+    window.setToken(res.access_token);
+    window.currentUser = res.user || null;
+
+    const roles = getRolesFromResponseOrToken(res);
+
+    if (window.router && typeof window.router.onLoginSuccess === "function") {
+      window.router.onLoginSuccess(roles);
+>>>>>>> 88ea35c (update)
+    } else {
+      if (isAdminRoles(roles)) window.location.href = "/admin/admin.html#dashboard";
+      else window.location.href = "/user/user.html#home";
+    }
+    return true;
+  }
+
+  // prevent double submit
+  let loginInProgress = false;
+  let registerInProgress = false;
+
+  document.addEventListener("DOMContentLoaded", async () => {
+    applyBg();
+
+    // warm up (so user click nhanh cũng ok)
+    await waitForAuthAPI(5000);
+
+    // ----- LOGIN -----
+    const loginForm = document.getElementById("loginForm");
     if (loginForm) {
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            console.log('Login form submitted');
-            
-            // Check if this is login.html (has email field) or index.html (has loginUsername field)
-            const emailInput = document.getElementById('email');
-            const usernameInput = document.getElementById('loginUsername');
-            const passwordInput = document.getElementById('password') || document.getElementById('loginPassword');
-            
-            console.log('Input elements:', {
-                emailInput: emailInput ? 'found' : 'not found',
-                usernameInput: usernameInput ? 'found' : 'not found',
-                passwordInput: passwordInput ? 'found' : 'not found'
-            });
-            
-            // Get username/email - prioritize email field (for login.html)
-            let username = '';
-            if (emailInput) {
-                username = emailInput.value || '';
-                console.log('Using email field, value:', username);
-            } else if (usernameInput) {
-                username = usernameInput.value || '';
-                console.log('Using username field, value:', username);
-            } else {
-                console.error('Neither email nor username input found!');
-                if (typeof showToast === 'function') {
-                    showToast('Lỗi: Không tìm thấy trường nhập liệu', 'error');
-                } else {
-                    alert('Lỗi: Không tìm thấy trường nhập liệu');
-                }
-                return;
-            }
-            
-            // Get password
-            const password = passwordInput ? (passwordInput.value || '') : '';
-            console.log('Password value:', password ? '***' : 'empty');
-            
-            if (!username || !password) {
-                const errorMsg = 'Vui lòng nhập đầy đủ thông tin';
-                console.error('Validation failed:', { username: !!username, password: !!password });
-                
-                // Show error in authMessage element
-                const authMessageEl = document.getElementById('authMessage');
-                if (authMessageEl) {
-                    authMessageEl.textContent = errorMsg;
-                    authMessageEl.classList.remove('hidden');
-                    authMessageEl.classList.add('error');
-                    setTimeout(() => {
-                        authMessageEl.classList.add('hidden');
-                        authMessageEl.classList.remove('error');
-                    }, 5000);
-                }
-                
-                if (typeof showToast === 'function') {
-                    showToast(errorMsg, 'error');
-                } else {
-                    alert(errorMsg);
-                }
-                return;
-            }
-            
-            console.log('Calling login function with username:', username);
-            await login(username, password);
-        });
-    } else {
-        console.warn('Login form not found (id="loginForm")');
-    }
-    
-    // Register form (for register.html and index.html)
-    const registerForm = document.getElementById('registerForm');
-    if (registerForm) {
-        registerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // Get form fields - support both register.html and index.html formats
-            const fullNameEl = document.getElementById('fullName') || document.getElementById('regFullName');
-            const emailEl = document.getElementById('regEmail');
-            const phoneEl = document.getElementById('regPhone');
-            const passwordEl = document.getElementById('regPassword');
-            const confirmPasswordEl = document.getElementById('regConfirm') || document.getElementById('regConfirmPassword');
-            
-            // Validate password confirmation
-            if (confirmPasswordEl && passwordEl && passwordEl.value !== confirmPasswordEl.value) {
-                showAuthMessage('Mật khẩu xác nhận không khớp', 'error');
-                if (typeof showToast === 'function') {
-                    showToast('Mật khẩu xác nhận không khớp', 'error');
-                }
-                return;
-            }
-            
-            const userData = {
-                email: emailEl ? emailEl.value : '',
-                full_name: fullNameEl ? fullNameEl.value : '',
-                password: passwordEl ? passwordEl.value : ''
-            };
-            
-            // Add phone if available (for register.html)
-            if (phoneEl && phoneEl.value) {
-                userData.phone = phoneEl.value;
-            }
-            
-            // Use email as username if username field not found
-            if (!document.getElementById('regUsername')) {
-                userData.username = userData.email;
-            } else {
-                userData.username = document.getElementById('regUsername').value;
-            }
-            
-            await register(userData);
-        });
-    }
-    
-    // Show register (for index.html)
-    const showRegister = document.getElementById('showRegister');
-    if (showRegister) {
-        showRegister.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('registerCard').style.display = 'block';
-            document.querySelector('.login-card:not(#registerCard)').style.display = 'none';
-        });
-    }
-    
-    // Show login (for index.html)
-    const showLogin = document.getElementById('showLogin');
-    if (showLogin) {
-        showLogin.addEventListener('click', (e) => {
-            e.preventDefault();
-            document.getElementById('registerCard').style.display = 'none';
-            document.querySelector('.login-card:not(#registerCard)').style.display = 'block';
-        });
-    }
-    
-    // Logout button (for index.html)
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', logout);
-    }
-    
-    // Check auth on load (only for index.html)
-    // user.html has its own checkUserAuth in user.js
-    if (document.body.classList.contains('user-layout') || document.body.classList.contains('admin-layout')) {
-        // Skip checkAuth for user.html and admin.html - they have their own auth checks
-        return;
-    }
-    checkAuth();
-});
+      const btn = document.getElementById("loginBtnSubmit") || document.querySelector("#loginForm button[type='submit']");
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (loginInProgress) return;
 
+        loginInProgress = true;
+        setButtonLoading(btn, true);
+
+        try {
+          const username = (document.getElementById("email")?.value || "").trim();
+          const password = (document.getElementById("password")?.value || "").trim();
+
+          if (!username || !password) {
+            showAuthMessage("Vui lòng nhập đầy đủ Email và Password.", "error");
+            return;
+          }
+
+          showAuthMessage("Đang đăng nhập...", "info");
+          await doLogin(username, password);
+        } catch (err) {
+          const msg = err?.message || "Đăng nhập thất bại. Vui lòng thử lại.";
+          showAuthMessage(msg, "error");
+          if (typeof window.showToast === "function") {
+            try { window.showToast(msg, "error"); } catch (_) {}
+          }
+        } finally {
+          loginInProgress = false;
+          setButtonLoading(btn, false);
+        }
+      });
+    }
+
+    // ----- REGISTER -----
+    const registerForm = document.getElementById("registerForm");
+    if (registerForm) {
+      const btn = document.getElementById("registerBtnSubmit") || document.querySelector("#registerForm button[type='submit']");
+      registerForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (registerInProgress) return;
+
+        registerInProgress = true;
+        setButtonLoading(btn, true);
+
+        try {
+          const fullName = (document.getElementById("fullName")?.value || "").trim();
+          const email = (document.getElementById("regEmail")?.value || "").trim();
+          const password = (document.getElementById("regPassword")?.value || "").trim();
+          const confirm = (document.getElementById("regConfirm")?.value || "").trim();
+          const phone = (document.getElementById("regPhone")?.value || "").trim();
+
+          if (!fullName || !email || !password || !confirm) {
+            showAuthMessage("Vui lòng nhập đầy đủ thông tin đăng ký.", "error");
+            return;
+          }
+
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            showAuthMessage("Email không hợp lệ.", "error");
+            return;
+          }
+          if (password.length < 6) {
+            showAuthMessage("Mật khẩu phải có ít nhất 6 ký tự.", "error");
+            return;
+          }
+          if (password !== confirm) {
+            showAuthMessage("Mật khẩu xác nhận không khớp.", "error");
+            return;
+          }
+
+          showAuthMessage("Đang tạo tài khoản...", "info");
+
+          // phù hợp API backend của bạn
+          const userData = {
+            username: email,
+            email,
+            full_name: fullName,
+            password,
+            role_name: "customer"
+          };
+
+          // nếu backend nhận phone thì thêm
+          if (phone) userData.phone = phone;
+
+          await doRegister(userData);
+        } catch (err) {
+          const msg = err?.message || "Đăng ký thất bại. Vui lòng thử lại.";
+          showAuthMessage(msg, "error");
+          if (typeof window.showToast === "function") {
+            try { window.showToast(msg, "error"); } catch (_) {}
+          }
+        } finally {
+          registerInProgress = false;
+          setButtonLoading(btn, false);
+        }
+      });
+    }
+  });
+})();

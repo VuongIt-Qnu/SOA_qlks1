@@ -1,101 +1,334 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
-  <meta charset="UTF-8" />
-  <title>Room Detail - Hotel Manager</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <!-- FontAwesome icon -->
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
-    referrerpolicy="no-referrer"
-  />
-
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chi tiết phòng - Hotel Manager</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/user.css">
+    <link rel="stylesheet" href="/css/room-detail.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body>
-  <!-- Header chung -->
-  <div id="header-placeholder"></div>
-
-  <main class="room-detail-page">
-    <!-- Back link -->
-    <button class="room-back" type="button" onclick="window.history.back()">
-      <i class="fa-solid fa-arrow-left"></i>
-      <span>Back to list</span>
-    </button>
-
-    <div class="room-detail-layout">
-      <!-- LEFT: gallery + info -->
-      <section class="room-detail-main">
-        <!-- gallery -->
-        <div class="room-gallery-main">
-          <img id="roomMainImage" src="/images/rooms/default-room.jpg" alt="Room" />
-        </div>
-        <div class="room-thumbs" id="roomThumbs">
-          <!-- thumbnails render bằng JS -->
-        </div>
-
-        <!-- info block -->
-        <div class="room-info-card">
-          <div class="room-title-row">
-            <span class="room-type-pill" id="roomTypePill">Suite</span>
-            <span class="room-rating-pill" id="roomRatingPill">
-              <i class="fa-solid fa-star"></i>
-              <span id="roomRatingText">4.8 (124 reviews)</span>
-            </span>
-          </div>
-          <h1 class="room-name-detail" id="roomName">Room Name</h1>
-
-          <div class="room-meta-row">
-            <div class="room-meta-item">
-              <i class="fa-solid fa-user-group"></i>
-              <span id="roomGuests">Up to 3 guests</span>
+<body class="user-layout">
+    <!-- Header -->
+    <header class="user-header">
+        <div class="header-container">
+            <div class="header-left">
+                <div class="logo">
+                    <div class="logo-square">
+                        <i class="fas fa-hotel"></i>
+                    </div>
+                    <span class="logo-text">Hotel Manager</span>
+                </div>
             </div>
-            <div class="room-meta-item">
-              <i class="fa-regular fa-square"></i>
-              <span id="roomSize">55 m²</span>
+            <nav class="header-nav">
+                <a href="/user/user.html#home" class="nav-item">Home</a>
+                <a href="/user/user.html#rooms" class="nav-item">Rooms</a>
+                <a href="/user/user.html#myBookings" class="nav-item">My Bookings</a>
+            </nav>
+            <div class="header-right">
+                <button id="userLoginBtn" class="btn btn-primary">Login</button>
+                <button id="userLogoutBtn" class="btn btn-secondary" style="display: none;">Logout</button>
             </div>
-            <div class="room-meta-item">
-              <i class="fa-solid fa-bed"></i>
-              <span id="roomBedType">1 King Bed</span>
-            </div>
-          </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="room-detail-main">
+        <!-- Loading State -->
+        <div id="roomDetailLoading" class="loading-container">
+            <div class="loading-spinner"></div>
+            <p>Đang tải thông tin phòng...</p>
         </div>
 
-        <!-- description -->
-        <section class="room-section-card">
-          <h3>Description</h3>
-          <p id="roomDescription">
-            <!-- JS fill -->
-          </p>
-        </section>
-
-        <!-- amenities -->
-        <section class="room-section-card">
-          <h3>Amenities</h3>
-          <div class="room-amenities-grid" id="roomAmenities">
-            <!-- JS fill -->
-          </div>
-        </section>
-
-        <!-- features -->
-        <section class="room-section-card">
-          <h3>Room Features</h3>
-          <div class="room-features-grid" id="roomFeatures">
-            <!-- JS fill -->
-          </div>
-        </section>
-      </section>
-
-      <!-- RIGHT: booking card -->
-      <aside class="room-book-card">
-        <div class="room-book-price-row">
-          <span class="room-book-price" id="bookingPrice">$0</span>
-          <span class="room-book-per-night">/ night</span>
+        <!-- Error State -->
+        <div id="roomDetailError" class="error-container" style="display: none;">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h2>Không thể tải thông tin phòng</h2>
+            <p id="errorMessage"></p>
+            <button class="btn btn-primary" onclick="window.location.href='/user/user.html#rooms'">
+                <i class="fas fa-arrow-left"></i> Quay lại danh sách
+            </button>
         </div>
-        <p class="room-book-note">Taxes and fees included</p>
 
+        <!-- Room Detail Content -->
+        <div id="roomDetailContent" style="display: none;">
+            <!-- Breadcrumb -->
+            <nav class="breadcrumb">
+                <a href="/user/user.html#home"><i class="fas fa-home"></i> Home</a>
+                <span>/</span>
+                <a href="/user/user.html#rooms">Rooms</a>
+                <span>/</span>
+                <span id="breadcrumbRoomName">Room Detail</span>
+            </nav>
+
+            <!-- Image Gallery Section -->
+            <section class="room-gallery-section">
+                <div class="gallery-main">
+                    <img id="mainRoomImage" src="" alt="Room Image" class="main-image">
+                    <button class="gallery-nav-btn prev-btn" onclick="changeMainImage(-1)">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button class="gallery-nav-btn next-btn" onclick="changeMainImage(1)">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <div class="image-counter">
+                        <span id="currentImageIndex">1</span> / <span id="totalImages">1</span>
+                    </div>
+                </div>
+                <div class="gallery-thumbnails" id="galleryThumbnails">
+                    <!-- Thumbnails will be populated by JS -->
+                </div>
+            </section>
+
+            <!-- Room Info Section -->
+            <section class="room-info-section">
+                <div class="room-info-container">
+                    <!-- Left Column: Main Info -->
+                    <div class="room-info-left">
+                        <!-- Header -->
+                        <div class="room-header">
+                            <div class="room-title-group">
+                                <h1 id="roomName" class="room-name">Room Name</h1>
+                                <div class="room-badges">
+                                    <span id="roomTypeBadge" class="badge badge-primary">Standard</span>
+                                    <span id="roomRatingBadge" class="badge badge-rating">
+                                        <i class="fas fa-star"></i> <span id="roomRating">4.5</span>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="room-price-large">
+                                <span class="price-amount" id="roomPrice">$500,000</span>
+                                <span class="price-unit">/ đêm</span>
+                            </div>
+                        </div>
+
+                        <!-- Basic Info Grid -->
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <i class="fas fa-hashtag"></i>
+                                <div>
+                                    <span class="info-label">Room ID</span>
+                                    <span class="info-value" id="roomId">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-bed"></i>
+                                <div>
+                                    <span class="info-label">Loại phòng</span>
+                                    <span class="info-value" id="roomTypeName">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-star"></i>
+                                <div>
+                                    <span class="info-label">Hạng phòng</span>
+                                    <span class="info-value" id="roomGrade">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-users"></i>
+                                <div>
+                                    <span class="info-label">Số người tối đa</span>
+                                    <span class="info-value" id="roomMaxOccupancy">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-ruler-combined"></i>
+                                <div>
+                                    <span class="info-label">Diện tích</span>
+                                    <span class="info-value" id="roomArea">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-window-maximize"></i>
+                                <div>
+                                    <span class="info-label">View</span>
+                                    <span class="info-value" id="roomView">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-building"></i>
+                                <div>
+                                    <span class="info-label">Tầng</span>
+                                    <span class="info-value" id="roomFloor">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-door-open"></i>
+                                <div>
+                                    <span class="info-label">Số phòng</span>
+                                    <span class="info-value" id="roomNumber">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-smoking-ban"></i>
+                                <div>
+                                    <span class="info-label">Hút thuốc</span>
+                                    <span class="info-value" id="roomSmoking">-</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-info-circle"></i>
+                                <div>
+                                    <span class="info-label">Trạng thái</span>
+                                    <span class="info-value" id="roomStatus">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Description -->
+                        <div class="room-description">
+                            <h3><i class="fas fa-align-left"></i> Mô tả phòng</h3>
+                            <p id="roomDescription">Đang tải mô tả...</p>
+                        </div>
+
+                        <!-- Amenities -->
+                        <div class="room-amenities">
+                            <h3><i class="fas fa-list"></i> Tiện nghi phòng</h3>
+                            <div class="amenities-grid" id="amenitiesGrid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Bed Configuration -->
+                        <div class="room-bed-config">
+                            <h3><i class="fas fa-bed"></i> Cấu hình giường & không gian</h3>
+                            <div class="bed-info-grid" id="bedInfoGrid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Policies -->
+                        <div class="room-policies">
+                            <h3><i class="fas fa-file-contract"></i> Chính sách & quy định</h3>
+                            <div class="policies-list" id="policiesList">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Booking Card -->
+                    <div class="room-info-right">
+                        <div class="booking-card-sticky">
+                            <div class="booking-card-header">
+                                <h3>Đặt phòng ngay</h3>
+                                <div class="price-display">
+                                    <span class="price-large" id="bookingPrice">$500,000</span>
+                                    <span class="price-small">/ đêm</span>
+                                </div>
+                            </div>
+                            
+                            <form id="bookingForm" class="booking-form">
+                                <div class="form-group">
+                                    <label for="checkInDate">
+                                        <i class="fas fa-calendar-check"></i> Check-in
+                                    </label>
+                                    <input type="date" id="checkInDate" name="checkIn" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="checkOutDate">
+                                        <i class="fas fa-calendar-times"></i> Check-out
+                                    </label>
+                                    <input type="date" id="checkOutDate" name="checkOut" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="guestsCount">
+                                        <i class="fas fa-users"></i> Số khách
+                                    </label>
+                                    <select id="guestsCount" name="guests" required>
+                                        <option value="1">1 khách</option>
+                                        <option value="2" selected>2 khách</option>
+                                        <option value="3">3 khách</option>
+                                        <option value="4">4 khách</option>
+                                        <option value="5">5 khách</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="specialRequests">
+                                        <i class="fas fa-comment-alt"></i> Yêu cầu đặc biệt (tùy chọn)
+                                    </label>
+                                    <textarea id="specialRequests" name="special_requests" rows="3" placeholder="Nhập yêu cầu đặc biệt của bạn..."></textarea>
+                                </div>
+                                
+                                <div class="price-breakdown" id="priceBreakdown">
+                                    <div class="breakdown-item">
+                                        <span>Giá / đêm</span>
+                                        <span id="pricePerNight">$500,000</span>
+                                    </div>
+                                    <div class="breakdown-item">
+                                        <span>Số đêm</span>
+                                        <span id="nightsCount">1</span>
+                                    </div>
+                                    <div class="breakdown-item">
+                                        <span>Thuế (10%)</span>
+                                        <span id="taxAmount">$50,000</span>
+                                    </div>
+                                    <div class="breakdown-item">
+                                        <span>Phí dịch vụ</span>
+                                        <span id="serviceFee">$0</span>
+                                    </div>
+                                    <div class="breakdown-total">
+                                        <span>Tổng tiền</span>
+                                        <span id="totalAmount">$550,000</span>
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-book-now" id="bookNowBtn">
+                                    <i class="fas fa-calendar-check"></i> Đặt phòng ngay
+                                </button>
+                                
+                                <div class="booking-note">
+                                    <i class="fas fa-info-circle"></i>
+                                    <small>Bạn có thể hủy miễn phí trước 24h</small>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Booking Info Section (if already booked) -->
+            <section id="existingBookingSection" class="existing-booking-section" style="display: none;">
+                <h3><i class="fas fa-calendar-alt"></i> Thông tin booking</h3>
+                <div class="booking-info-card" id="existingBookingCard">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <!-- Timeline Section -->
+            <section id="timelineSection" class="timeline-section" style="display: none;">
+                <h3><i class="fas fa-history"></i> Lịch sử & timeline</h3>
+                <div class="timeline" id="roomTimeline">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <!-- Action Buttons -->
+            <section class="room-actions">
+                <button class="btn btn-secondary" onclick="window.location.href='/user/user.html#rooms'">
+                    <i class="fas fa-arrow-left"></i> Quay lại danh sách
+                </button>
+                <button class="btn btn-primary" id="viewBookingBtn" style="display: none;">
+                    <i class="fas fa-eye"></i> Xem booking
+                </button>
+                <button class="btn btn-success" id="makePaymentBtn" style="display: none;">
+                    <i class="fas fa-credit-card"></i> Thanh toán
+                </button>
+                <button class="btn btn-danger" id="cancelBookingBtn" style="display: none;">
+                    <i class="fas fa-times"></i> Hủy booking
+                </button>
+                <button class="btn btn-info" id="downloadInvoiceBtn" style="display: none;">
+                    <i class="fas fa-download"></i> Tải hóa đơn
+                </button>
+            </section>
+        </div>
+    </main>
+
+<<<<<<< HEAD
         <div class="room-book-info">
           <div class="room-book-info-row">
             <span class="room-book-label">Room Type</span>
@@ -164,5 +397,12 @@
   <link rel="stylesheet" href="/js/home.css" />
   <script src="/js/include.js" defer></script>
   <script src="/js/room.js" defer></script>
+=======
+    <!-- Scripts -->
+    <script src="/js/api.js"></script>
+    <script src="/js/jwt-utils.js"></script>
+    <script src="/js/utils.js"></script>
+    <script src="/js/room-detail.js"></script>
+>>>>>>> 88ea35c (update)
 </body>
 </html>

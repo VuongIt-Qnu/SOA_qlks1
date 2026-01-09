@@ -109,9 +109,256 @@
         <!-- My Bookings Page -->
         <div id="myBookingsPage" class="user-page">
             <div class="page-container">
-                <h1 class="page-title">My Bookings</h1>
-                <div class="bookings-list" id="myBookingsList">
-                    <!-- Will be populated by JavaScript -->
+                <div class="bookings-header">
+                    <h1 class="page-title">
+                        <i class="fas fa-calendar-check"></i> My Bookings
+                    </h1>
+                    <p class="page-subtitle">Manage and view all your hotel reservations</p>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="bookings-stats" id="bookingsStats">
+                    <div class="stat-card stat-total">
+                        <div class="stat-icon"><i class="fas fa-list"></i></div>
+                        <div class="stat-number" id="totalBookings">0</div>
+                        <div class="stat-label">Total Bookings</div>
+                    </div>
+                    <div class="stat-card stat-confirmed">
+                        <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                        <div class="stat-number" id="confirmedCount">0</div>
+                        <div class="stat-label">Confirmed</div>
+                    </div>
+                    <div class="stat-card stat-pending">
+                        <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                        <div class="stat-number" id="pendingCount">0</div>
+                        <div class="stat-label">Pending</div>
+                    </div>
+                    <div class="stat-card stat-cancelled">
+                        <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
+                        <div class="stat-number" id="cancelledCount">0</div>
+                        <div class="stat-label">Cancelled</div>
+                    </div>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div class="bookings-tabs">
+                    <button class="tab-btn active" data-status="all" onclick="filterBookings('all')">
+                        <i class="fas fa-list"></i> All (<span id="tabAllCount">0</span>)
+                    </button>
+                    <button class="tab-btn" data-status="confirmed" onclick="filterBookings('confirmed')">
+                        <i class="fas fa-check-circle"></i> Confirmed (<span id="tabConfirmedCount">0</span>)
+                    </button>
+                    <button class="tab-btn" data-status="pending" onclick="filterBookings('pending')">
+                        <i class="fas fa-clock"></i> Pending (<span id="tabPendingCount">0</span>)
+                    </button>
+                    <button class="tab-btn" data-status="cancelled" onclick="filterBookings('cancelled')">
+                        <i class="fas fa-times-circle"></i> Cancelled (<span id="tabCancelledCount">0</span>)
+                    </button>
+                </div>
+
+                <!-- Bookings List -->
+                <div class="bookings-list-container">
+                    <div class="bookings-list" id="myBookingsList">
+                        <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading bookings...</p>
+                        </div>
+                    </div>
+                    <div id="noBookings" class="empty-state" style="display: none;">
+                        <i class="fas fa-inbox"></i>
+                        <h3>No Bookings Yet</h3>
+                        <p>You haven't made any bookings yet. Start exploring our rooms!</p>
+                        <button class="btn btn-primary" onclick="showUserPage('home')">
+                            <i class="fas fa-search"></i> Browse Rooms
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Page -->
+        <div id="profilePage" class="user-page">
+            <div class="profile-container">
+                <!-- Profile Sidebar -->
+                <aside class="profile-sidebar">
+                    <div class="profile-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="profile-name" id="sidebarName">Loading...</div>
+                    <div class="profile-email" id="sidebarEmail">Loading...</div>
+
+                    <nav class="profile-menu">
+                        <button class="profile-menu-item active" data-section="personal" onclick="showProfileSection('personal')">
+                            <i class="fas fa-user"></i>
+                            <span>Personal Info</span>
+                        </button>
+                        <button class="profile-menu-item" data-section="password" onclick="showProfileSection('password')">
+                            <i class="fas fa-lock"></i>
+                            <span>Change Password</span>
+                        </button>
+                        <button class="profile-menu-item" data-section="notifications" onclick="showProfileSection('notifications')">
+                            <i class="fas fa-bell"></i>
+                            <span>Notifications</span>
+                        </button>
+                    </nav>
+
+                    <!-- Account Stats -->
+                    <div class="profile-stats">
+                        <div class="profile-stats-title">Account Stats</div>
+                        <div class="profile-stat-item">
+                            <span class="profile-stat-label">Total Bookings</span>
+                            <span class="profile-stat-value" id="statTotalBookings">0</span>
+                        </div>
+                        <div class="profile-stat-item">
+                            <span class="profile-stat-label">Active Reservations</span>
+                            <span class="profile-stat-value" id="statActiveReservations">0</span>
+                        </div>
+                        <div class="profile-stat-item">
+                            <span class="profile-stat-label">Member Since</span>
+                            <span class="profile-stat-value" id="statMemberSince">-</span>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Profile Content -->
+                <div class="profile-content">
+                    <!-- Personal Information Section -->
+                    <div id="personalSection" class="profile-section active">
+                        <div class="profile-content-header">
+                            <div>
+                                <h2 class="profile-content-title">Personal Information</h2>
+                                <p class="profile-content-subtitle">Update your account details here</p>
+                            </div>
+                            <button class="btn-edit" id="btnEditPersonal" onclick="toggleEditPersonal()">
+                                <i class="fas fa-edit"></i> Edit Profile
+                            </button>
+                        </div>
+
+                        <div class="success-message" id="personalSuccess" style="display: none;">
+                            <i class="fas fa-check-circle"></i> Profile updated successfully!
+                        </div>
+
+                        <form id="personalForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label><i class="fas fa-user"></i> Full Name</label>
+                                    <input type="text" id="fullName" disabled />
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-envelope"></i> Email Address</label>
+                                    <input type="email" id="email" disabled />
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label><i class="fas fa-phone"></i> Phone Number</label>
+                                    <input type="tel" id="phone" disabled placeholder="Enter phone number" />
+                                </div>
+                                <div class="form-group">
+                                    <label><i class="fas fa-id-card"></i> Username</label>
+                                    <input type="text" id="username" disabled title="Username cannot be changed" />
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group full-width">
+                                    <label><i class="fas fa-map-marker-alt"></i> Address</label>
+                                    <input type="text" id="address" disabled placeholder="Enter your address" />
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn-save" id="btnSavePersonal" style="display: none;" onclick="savePersonalInfo()">
+                                <i class="fas fa-save"></i> Save Changes
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Change Password Section -->
+                    <div id="passwordSection" class="profile-section">
+                        <div class="profile-content-header">
+                            <div>
+                                <h2 class="profile-content-title">Change Password</h2>
+                                <p class="profile-content-subtitle">Update your password regularly for security</p>
+                            </div>
+                        </div>
+
+                        <div class="success-message" id="passwordSuccess" style="display: none;">
+                            <i class="fas fa-check-circle"></i> Password changed successfully!
+                        </div>
+
+                        <form id="passwordForm" onsubmit="changePassword(event)">
+                            <div class="form-row full">
+                                <div class="form-group">
+                                    <label><i class="fas fa-lock"></i> Current Password</label>
+                                    <input type="password" id="currentPassword" placeholder="Enter your current password" required />
+                                </div>
+                            </div>
+
+                            <div class="form-row full">
+                                <div class="form-group">
+                                    <label><i class="fas fa-key"></i> New Password</label>
+                                    <input type="password" id="newPassword" placeholder="Enter new password (min 6 characters)" required minlength="6" />
+                                </div>
+                            </div>
+
+                            <div class="form-row full">
+                                <div class="form-group">
+                                    <label><i class="fas fa-key"></i> Confirm New Password</label>
+                                    <input type="password" id="confirmPassword" placeholder="Confirm new password" required minlength="6" />
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn-save">
+                                <i class="fas fa-save"></i> Change Password
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Notifications Section -->
+                    <div id="notificationsSection" class="profile-section">
+                        <div class="profile-content-header">
+                            <div>
+                                <h2 class="profile-content-title">Notifications</h2>
+                                <p class="profile-content-subtitle">Manage your communication preferences</p>
+                            </div>
+                        </div>
+
+                        <div class="preference-list">
+                            <div class="preference-item">
+                                <div class="preference-info">
+                                    <h4><i class="fas fa-envelope"></i> Email Notifications</h4>
+                                    <p>Receive booking confirmations and updates</p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="emailNotifications" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="preference-item">
+                                <div class="preference-info">
+                                    <h4><i class="fas fa-bullhorn"></i> Marketing Emails</h4>
+                                    <p>Receive special offers and promotions</p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="marketingEmails" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="preference-item">
+                                <div class="preference-info">
+                                    <h4><i class="fas fa-bell"></i> Booking Reminders</h4>
+                                    <p>Get reminders for your upcoming bookings</p>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="bookingReminders" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
